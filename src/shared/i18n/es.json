@@ -1,0 +1,161 @@
+{
+  "titles": {
+    "app": {
+      "home": "Inicio",
+      "error": "Error del servidor",
+      "unauthorized": "No autorizado",
+      "notfound": "No encontrado"
+    },
+    "auth": {
+      "login": "Inicio de sesión"
+    },
+    "zms": {
+      "difusion": "Difusión",
+      "paginacion": "Paginación"
+    },
+    "pbi": {
+      "gastos_eventos": "Gastos de eventos"
+    }
+  },
+  "solutions": {
+    "messages": {
+      "title": "Mensajes",
+      "empty": "No hay mensajes en esta solución."
+    },
+    "more-menu": {
+      "copy": "Copiar enlace",
+      "refresh": "Recargar página",
+      "customize": "Modificar página",
+      "export": {
+        "local": "Exportar datos local",
+        "remote": "Exportar datos remotos"
+      }
+    }
+  },
+  "forms": {
+    "name": "Nombre",
+    "username": "Nick",
+    "usergroup": "Grupo del usuario",
+    "email": "Correo electrónico",
+    "dni": "DNI/NIE/NIF",
+    "submit": "Guardar cambios",
+    "password": "Contraseña",
+    "current-password": "Contraseña actual",
+    "new-password": "Nueva contraseña",
+    "confirm-new-password": "Confirma la nueva contraseña",
+    "enter-password": "Introduce la contraseña",
+    "search": "Buscar",
+    "login": "Iniciar sesión",
+    "logging": "Iniciando sesión",
+    "logout": "Cerrar sesión",
+    "search-solutions": "Buscar soluciones",
+    "search-name-code": "Buscar por nombre o código",
+    "no-results": "Nada coincide con tu búsqueda",
+    "change-filters": "Intenta cambiar la búsqueda o los filtros.",
+    "results": "Sin resultados | 1 resultado | {count} resultados"
+  },
+  "themes": {
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema"
+  },
+  "languages": {
+    "es": "Español",
+    "en": "Inglés",
+    "cat": "Catalán"
+  },
+  "activities": {
+    "all": "Todas las actividades",
+    "none": "Sin actividad"
+  },
+  "roles": {
+    "title": "Rol",
+    "all": "Todos los roles",
+    "admin": "Admin",
+    "rw": "Lectura y escritura",
+    "r": "Sólo lectura",
+    "none": "Sin rol"
+  },
+  "companies": {
+    "all": "Todas las sociedades",
+    "none": "Sin sociedades",
+    "associated": "Sin sociedades asociadas | 1 sociedad asociada | {count} sociedades asociadas",
+    "active": "Activa",
+    "inactive": "Inactiva"
+  },
+  "categories": {
+    "all": "Todas las categorías",
+    "none": "Sin categoría"
+  },
+  "app": {
+    "return": "Volver al sitio web",
+    "error": "Los engranajes del reino se atascaron de nuestro lado — estamos en ello. Intenta de nuevo más tarde.",
+    "notfound": "Parece que te has adentrado en un reino digital desconocido.",
+    "unauthorized": "Parece que no tienes las llaves de este reino.",
+    "home": {
+      "title": "Bienvenido — Explora tus soluciones",
+      "description": "Encuentra y abre las soluciones a las que tienes acceso.",
+      "search": "Busca por nombre de solución o categoría…"
+    }
+  },
+  "account": {
+    "title": "Cuenta",
+    "description": "Gestiona la información y los ajustes de tu cuenta.",
+    "profile": {
+      "title": "Perfil",
+      "info": {
+        "title": "Información personal",
+        "description": "Consulta tus datos personales."
+      },
+      "password": {
+        "title": "Cambiar contraseña",
+        "description": "Cambia tu contraseña."
+      }
+    },
+    "companies": {
+      "title": "Sociedades",
+      "description": "Administra las sociedades vinculadas a tu cuenta.",
+      "card": {
+        "code": "Código",
+        "type": "Tipo",
+        "activity": "Actividad",
+        "erp-publicidad": "ERP Publicidad",
+        "erp-financiero": "ERP Financiero"
+      }
+    },
+    "solutions": {
+      "title": "Soluciones",
+      "description": "Gestiona las soluciones disponibles en tu cuenta.",
+      "card": {
+        "code": "Código",
+        "active": "Sociedad activa",
+        "inactive": "Sociedad inactiva"
+      }
+    }
+  },
+  "preferences": {
+    "title": "Preferencias",
+    "description": "Configura el aspecto y el comportamiento de la aplicación.",
+    "appearance": {
+      "title": "Apariencia",
+      "description": "Personaliza tema, idioma y tipografía de la interfaz.",
+      "font": {
+        "label": "Fuente",
+        "description": "Selecciona la tipografía del panel."
+      },
+      "language": {
+        "label": "Idioma",
+        "description": "Define el idioma de la interfaz."
+      },
+      "theme": {
+        "label": "Tema",
+        "description": "Elige claro, oscuro o seguir el sistema."
+      }
+    }
+  },
+  "login": {
+    "title": "Portal SED",
+    "description": "Bienvenido de vuelta",
+    "continue-with": "O continúa con"
+  }
+}

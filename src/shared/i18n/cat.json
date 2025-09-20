@@ -1,0 +1,154 @@
+{
+  "titles": {
+    "app": {
+      "home": "Inici",
+      "error": "Error del servidor",
+      "unauthorized": "No autoritzat",
+      "notfound": "No trobat"
+    },
+    "auth": {
+      "login": "Inici de sessió"
+    },
+    "zms": {
+      "difusion": "Difusió",
+      "paginacion": "Paginació"
+    },
+    "pbi": {
+      "gastos_eventos": "Despeses d'esdeveniments"
+    }
+  },
+  "solutions": {
+    "messages": {
+      "title": "Missatges",
+      "empty": "No hi ha missatges en aquesta solució."
+    },
+    "more-menu": {
+      "copy": "Copiar enllaç",
+      "refresh": "Recàrrega la pàgina",
+      "customize": "Modificar pàgina",
+      "export": {
+        "local": "Exportar dades locals",
+        "remote": "Exportar dades remotes"
+      }
+    }
+  },
+  "forms": {
+    "name": "Nom",
+    "username": "Nick",
+    "usergroup": "vGrup d'usuari",
+    "dni": "DNI/NIE/NIF",
+    "email": "Correu electrònic",
+    "submit": "Desar canvis",
+    "password": "Contrasenya",
+    "current-password": "Contrasenya actual",
+    "new-password": "Nova contrasenya",
+    "confirm-new-password": "Confirma la nova contrasenya",
+    "enter-password": "Introdueix la contrasenya",
+    "search": "Cercar",
+    "login": "Iniciar sessió",
+    "logging": "Iniciant sessió",
+    "logout": "Tancar sessió",
+    "search-solutions": "Cercar solucions",
+    "search-name-code": "Cerca per nom o codi",
+    "no-results": "Cap resultat coincideix amb la teva cerca",
+    "change-filters": "Prova de canviar la cerca o els filtres.",
+    "results": "Sense resultats | 1 resultat | {count} resultats"
+  },
+  "themes": {
+    "light": "Clar",
+    "dark": "Fosc",
+    "system": "Sistema"
+  },
+  "languages": {
+    "es": "Espanyol",
+    "en": "Anglès",
+    "cat": "Català"
+  },
+  "activities": {
+    "all": "Totes les activitats",
+    "none": "Sense activitat"
+  },
+  "roles": {
+    "title": "Rol",
+    "all": "Tots els rols",
+    "admin": "Admin",
+    "rw": "Lectura i escriptura",
+    "r": "Només lectura",
+    "none": "Sense rol"
+  },
+  "companies": {
+    "all": "Totes les societats",
+    "none": "Sense societats",
+    "associated": "Sense societats associades | 1 societat associada | {count} societats associades",
+    "active": "Activa",
+    "inactive": "Inactiva"
+  },
+  "categories": {
+    "all": "Totes les categories",
+    "none": "Sense categoria"
+  },
+  "app": {
+    "return": "Torna al lloc web",
+    "error": "Els engranatges del regne s’han encallat de la nostra banda — hi estem treballant. Torna-ho a provar més tard.",
+    "notfound": "Sembla que t’has endinsat en un regne digital desconegut.",
+    "unauthorized": "Sembla que no tens les claus d’aquest regne.",
+    "home": {
+      "title": "Benvingut — Explora les teves solucions",
+      "description": "Troba i obre les solucions a les quals tens accés.",
+      "search": "Cerca per nom de solució o categoria…"
+    }
+  },
+  "account": {
+    "title": "Compte",
+    "description": "Gestiona la informació i els paràmeters del teu compte.",
+    "profile": {
+      "title": "Perfil",
+      "info": {
+        "title": "Informació personal",
+        "description": "Consulta les teves dades personals."
+      },
+      "password": {
+        "title": "Canvia la contrasenya",
+        "description": "Canvia la teva contrasenya."
+      }
+    },
+    "companies": {
+      "title": "Societats",
+      "description": "Gestiona les societats vinculades al teu compte.",
+      "card": {
+        "code": "Codi",
+        "active": "Societat activa",
+        "inactive": "Societat inactiva"
+      }
+    },
+    "solutions": {
+      "title": "Solucions",
+      "description": "Gestiona les solucions disponibles al teu compte."
+    }
+  },
+  "preferences": {
+    "title": "Preferències",
+    "description": "Configura l’aspecte i el comportament de l’aplicació.",
+    "appearance": {
+      "title": "Aparença",
+      "description": "Personalitza tema, idioma i tipografia de la interfície.",
+      "font": {
+        "label": "Font",
+        "description": "Selecciona la tipografia del panell."
+      },
+      "language": {
+        "label": "Idioma",
+        "description": "Defineix l’idioma de la interfície."
+      },
+      "theme": {
+        "label": "Tema",
+        "description": "Tria clar, fosc o seguir el sistema."
+      }
+    }
+  },
+  "login": {
+    "title": "Portal SED",
+    "description": "Benvingut de nou",
+    "continue-with": "O continua amb"
+  }
+}

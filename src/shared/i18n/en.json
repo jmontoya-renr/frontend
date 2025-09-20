@@ -1,0 +1,161 @@
+{
+  "titles": {
+    "app": {
+      "home": "Home",
+      "error": "Server Error",
+      "unauthorized": "Unauthorized",
+      "notfound": "Not Found"
+    },
+    "auth": {
+      "login": "Log In"
+    },
+    "zms": {
+      "difusion": "Diffusion",
+      "paginacion": "Pagination"
+    },
+    "pbi": {
+      "gastos_eventos": "Event Expenses"
+    }
+  },
+  "solutions": {
+    "messages": {
+      "title": "Messages",
+      "empty": "There are no messages in this solution."
+    },
+    "more-menu": {
+      "copy": "Copy link",
+      "refresh": "Reload page",
+      "customize": "Customize page",
+      "export": {
+        "local": "Export local data",
+        "remote": "Export remote data"
+      }
+    }
+  },
+  "forms": {
+    "name": "Name",
+    "username": "Username",
+    "email": "Email",
+    "dni": "DNI/NIE/NIF",
+    "usergroup": "User group",
+    "submit": "Save changes",
+    "password": "Password",
+    "current-password": "Current password",
+    "new-password": "New password",
+    "confirm-new-password": "Confirm new password",
+    "enter-password": "Enter password",
+    "search": "Search",
+    "login": "Log in",
+    "logging": "Logging in",
+    "logout": "Log out",
+    "search-solutions": "Search solutions",
+    "search-name-code": "Search by name or code",
+    "no-results": "Nothing matches your search",
+    "change-filters": "Try changing the search or filters.",
+    "results": "No results | 1 result | {count} results"
+  },
+  "themes": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "languages": {
+    "es": "Spanish",
+    "en": "English",
+    "cat": "Catalan"
+  },
+  "activities": {
+    "all": "All activities",
+    "none": "No activity"
+  },
+  "companies": {
+    "all": "All companies",
+    "none": "No companies",
+    "associated": "No associated companies | 1 associated company | {count} associated companies",
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "roles": {
+    "title": "Role",
+    "all": "All roles",
+    "admin": "Admin",
+    "rw": "Read and write",
+    "r": "Read only",
+    "none": "No role"
+  },
+  "categories": {
+    "all": "All categories",
+    "none": "No category"
+  },
+  "app": {
+    "return": "Return to website",
+    "error": "The realm’s gears jammed on our side — we’re on it. Please try again later.",
+    "notfound": "Looks like you've ventured into the unknown digital realm.",
+    "unauthorized": "Looks like you don’t have the keys to this realm.",
+    "home": {
+      "title": "Welcome — Explore Your Solutions",
+      "description": "Find and open the solutions you have access to.",
+      "search": "Search by solution name or category…"
+    }
+  },
+  "account": {
+    "title": "Account",
+    "description": "Manage your account information and settings.",
+    "profile": {
+      "title": "Profile",
+      "info": {
+        "title": "Personal Information",
+        "description": "View your personal data."
+      },
+      "password": {
+        "title": "Change Password",
+        "description": "Change your password."
+      }
+    },
+    "companies": {
+      "title": "Companies",
+      "description": "Manage the companies linked to your account.",
+      "card": {
+        "code": "Code",
+        "type": "Type",
+        "activity": "Activity",
+        "erp-publicidad": "ERP Advertising",
+        "erp-financiero": "ERP Financial"
+      }
+    },
+    "solutions": {
+      "title": "Solutions",
+      "description": "Manage the solutions available in your account.",
+      "card": {
+        "code": "Code",
+        "active": "Active company",
+        "inactive": "Inactive company"
+      }
+    }
+  },
+  "preferences": {
+    "title": "Preferences",
+    "description": "Configure the appearance and behavior of the application.",
+    "appearance": {
+      "title": "Appearance",
+      "description": "Customize the theme, language, and typography of the interface.",
+      "font": {
+        "label": "Font",
+        "description": "Select the font for the panel."
+      },
+      "language": {
+        "label": "Language",
+        "description": "Define the interface language."
+      },
+      "theme": {
+        "label": "Theme",
+        "description": "Choose light, dark, or follow system settings."
+      }
+    }
+  },
+  "login": {
+    "title": "Portal SED",
+    "description": "Welcome back",
+    "continue-with": "Or continue with"
+  }
+}
