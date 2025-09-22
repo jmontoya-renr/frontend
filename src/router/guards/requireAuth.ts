@@ -1,6 +1,7 @@
 import type { NavigationGuard, RouteLocationRaw } from 'vue-router'
 import { useAuthStore } from '@/features/auth/stores'
 import { pinia } from '@/plugins'
+import { parseSolutionName } from '@/shared/utils/parseSolutionName'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -29,7 +30,11 @@ export const requireAuth: NavigationGuard = (to, from) => {
   // Does not require permissions
   if (to.meta.noPermsRequired) return true
   // If have permission -> SolutionPage
-  if (auth.soluciones.some((s) => s.codigo == to.name)) return true
+  const allowed = new Set<string>(auth.soluciones.map((s) => s.codigo))
+  const byName = typeof to.name === 'string' && allowed.has(to.name)
+  const { solutionId } = parseSolutionName(to.name)
+  const bySolution = !!solutionId && allowed.has(solutionId)
+  if (byName || bySolution) return true
 
   const canUseFrom = !!from.name && !NO_REDIRECT_TO.includes(from.name as string)
 

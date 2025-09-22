@@ -55,7 +55,6 @@ export function useCursorPagination<T>(apiUrl: string, pageSize: number = 40) {
       const response = await axios.get<PaginationData<T>>(apiUrl, {
         params: { limit: pageSize, cursor },
       })
-      console.log(response)
       const newPage = response.data as PaginationData<T>
 
       pages.value.push(newPage)

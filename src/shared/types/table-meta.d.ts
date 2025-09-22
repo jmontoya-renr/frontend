@@ -2,6 +2,8 @@
 import { TableMeta } from '@tanstack/vue-table'
 import { ColumnFilterMeta } from './table-filters'
 
+type RowCommitReason = 'row-change' | 'edit-exit' | 'unmount'
+
 // Extiende TableMeta sin sobrescribir la interfaz completa
 declare module '@tanstack/vue-table' {
   interface TableMeta<TData> {
@@ -17,12 +19,16 @@ declare module '@tanstack/vue-table' {
       value: TData[K],
       originalRow: TData,
     ) => void
+    commitRowAt?: (rowIndex: number, reason: RowCommitReason = 'row-change') => boolean
+    commitRowAtAsync?: (rowIndex: number, reason: RowCommitReason = 'row-change') => Promise<void>
+    commitOriginalAsync?: (original: TData, reason: RowCommitReason = 'row-change') => Promise<void>
     isCellDirtyById?: (rowIndex: number, colId: keyof TData) => boolean
   }
 
   interface ColumnMeta<TData, TValue> {
     editable?: boolean
     createOnly?: boolean
+    fixedFirst?: boolean
     filter?: ColumnFilterMeta
   }
 }

@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { t } from '@/plugins/i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, type RouteRecordName } from 'vue-router'
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 
 import { useAuthStore } from '@/features/auth/stores'
 import { useSolutionBus } from '@/shared/composables/useSolutionBus'
-import { CalendarDate, today, getLocalTimeZone, type DateValue } from '@internationalized/date'
 
 // ➜ Usamos tu nuevo composable
 import { useCursorCrud } from '@/shared/composables/table/useCursorCrud'
 
 import { convertToCSV, downloadCSV } from '@/shared/utils/csv-helpers'
-import type { Difusion } from '../difusion'
+import type { GastoEventoInferido } from '../gasto_evento'
 
-import { columns } from '../columns'
+import { columns } from '@/features/gasto_evento/columns.inferido'
 import DataTable from '@/shared/components/table/DataTable.vue'
 
 const route = useRoute()
@@ -25,23 +24,8 @@ const { ensureLoaded: ensureEmpresas, options, editableOptions } = useEmpresasCa
 
 const dataTable = useTemplateRef('data-table')
 
-// Time zone (usa la local; si quieres fijo: 'Europe/Madrid')
-const tz = getLocalTimeZone()
-
-// Today as DateValue
-const todayDv: DateValue = today(tz)
-
-// First day of this month
-const firstDayOfThisMonth: DateValue = new CalendarDate(todayDv.year, todayDv.month, 1)
-
-// (Opcional) Si tu hijo espera strings YYYY-MM-DD:
-const todayStr = todayDv.toString()
-const firstDayStr = firstDayOfThisMonth.toString()
-
 function buildInitialFilters(): Record<string, string[]> {
   return {
-    fecha_inicio: [firstDayStr],
-    fecha_fin: [todayStr],
     empresas: options.value.map((e) => e.value),
   }
 }
@@ -58,8 +42,13 @@ const {
   setSort,
   clearSort,
   update: updateItem, // update en servidor (el composable sincroniza su items)
-} = useCursorCrud<Difusion, string | number, Partial<Difusion>, Partial<Difusion>>({
-  baseUrl: 'http://localhost:9000/zms_difusion',
+} = useCursorCrud<
+  GastoEventoInferido,
+  string | number,
+  Partial<GastoEventoInferido>,
+  Partial<GastoEventoInferido>
+>({
+  baseUrl: 'http://localhost:9000/pbi_gasto/inferido/',
   idKey: 'id',
   initialParams: {
     limit: 50,
@@ -130,9 +119,28 @@ async function loadMore(): Promise<void> {
 }
 
 // ======= Bus de solución y utilidades =======
-const getSolutionId = computed(() => {
-  const solutionCode = route.name
-  return authStore.soluciones.find((sol) => sol.codigo === solutionCode)?.id ?? null
+const SEP = '::' as const
+
+// type guard for route names
+const isStrName = (n: RouteRecordName | null | undefined): n is string =>
+  typeof n === 'string' && n.length > 0
+
+// extract solutionId from "SOLUTION::page"
+const extractSolutionId = (fullName: string): string => {
+  const i = fullName.indexOf(SEP)
+  return i === -1 ? fullName : fullName.slice(0, i)
+}
+
+const getSolutionId = computed<number | undefined>(() => {
+  if (!isStrName(route.name)) return undefined
+
+  const fullCode = route.name
+
+  const solCode = extractSolutionId(fullCode)
+  const bySolution = authStore.soluciones.find((s) => s.codigo === solCode)
+  if (bySolution) return bySolution.id
+
+  return undefined
 })
 
 const bus = useSolutionBus(getSolutionId.value ?? 0)
@@ -148,7 +156,7 @@ function exportLocal() {
   const recordsToExport = items.value // usamos directamente las filas del composable
   if (recordsToExport.length > 0) {
     const csvContent = convertToCSV(recordsToExport)
-    const name = t('titles.zms.paginacion')
+    const name = t('titles.pbi.gastos_eventos')
     const filename = getFormattedFilename(name)
     downloadCSV(csvContent, filename)
   } else {
@@ -177,20 +185,28 @@ onBeforeUnmount(() => {
 })
 
 // ======= Edición de filas =======
-function isRowEditable(row: Difusion, rowIndex: number) {
+function isRowEditable(row: GastoEventoInferido, rowIndex: number) {
   return editableOptions.value.map((e) => e.value).includes(row.empresa)
 }
 
 type RowCommitPayload = {
   rowId: string | number
-  patch: Partial<Difusion>
+  patch: Partial<GastoEventoInferido>
+  full: GastoEventoInferido
   onSuccess: () => void
   onError: (err?: unknown) => void
 }
 
-async function onRowCommit({ rowId, patch, onSuccess, onError }: RowCommitPayload) {
+async function onRowCommit({ rowId, patch, full, onSuccess, onError }: RowCommitPayload) {
   try {
-    await updateItem(rowId, patch) // el composable actualiza su `items` internamente
+    const payload = {
+      ...patch,
+      ...('campanya_inferido' in full ? { campanya_inferido: full.campanya_inferido } : {}),
+      ...('concepto_gasto_inferido' in full
+        ? { concepto_gasto_inferido: full.concepto_gasto_inferido }
+        : {}),
+    }
+    await updateItem(rowId, payload) // el composable actualiza su `items` internamente
     onSuccess()
   } catch (e) {
     onError(e)
@@ -208,7 +224,7 @@ onMounted(async () => {
   <section class="mx-auto flex flex-col min-h-0 min-w-0 flex-1 px-8 py-4 w-full max-w-8xl">
     <!-- Header -->
     <header class="mb-8">
-      <h1 class="text-3xl font-bold tracking-tight">{{ $t('titles.zms.difusion') }}</h1>
+      <h1 class="text-3xl font-bold tracking-tight">{{ $t('titles.pbi.gastos_eventos') }}</h1>
     </header>
 
     <section class="flex-1 min-h-0 min-w-0 flex flex-col space-y-4">

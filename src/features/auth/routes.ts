@@ -1,7 +1,7 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { t } from '@/plugins/i18n'
 
-const routes: RouteRecordRaw[] = [
+const routes: Array<RouteRecordRaw> = [
   {
     path: '/login',
     name: 'auth.login',

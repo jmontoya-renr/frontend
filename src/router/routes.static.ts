@@ -1,7 +1,7 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { t } from '@/plugins/i18n'
 
-export const staticRoutes: RouteRecordRaw[] = [
+export const staticRoutes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'app.home',

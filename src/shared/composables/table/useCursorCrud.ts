@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 import api from '@/plugins/axios'
 
-import type { MetaData, PaginationData } from '@/shared/schemas/api-data-response'
+import type { MetaData, PaginationData, ResponseData } from '@/shared/schemas/api-data-response'
 
 // ==== Tipos del composable ====
 
@@ -42,8 +42,8 @@ export interface UseCursorCrudReturn<T, Id extends string | number, C, U>
   prevPage: () => Promise<void>
   reset: () => void
 
-  create: (payload: C) => Promise<T>
-  update: (id: Id, payload: U) => Promise<T>
+  create: (payload: C) => Promise<ResponseData<T>>
+  update: (id: Id, payload: U) => Promise<ResponseData<T>>
   remove: (id: Id) => Promise<void>
 }
 
@@ -210,23 +210,23 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
     }
   }
 
-  async function create(payload: C): Promise<T> {
-    const { data } = await api.post<T>(config.baseUrl, payload)
-    items.value = [data, ...items.value]
+  async function create(payload: C): Promise<ResponseData<T>> {
+    const { data } = await api.post<ResponseData<T>>(config.baseUrl, payload)
+    items.value = [data.content, ...items.value]
     if (typeof meta.value.returned === 'number') {
       meta.value.returned = meta.value.returned + 1
     }
     return data
   }
 
-  async function update(id: Id, payload: U): Promise<T> {
+  async function update(id: Id, payload: U): Promise<ResponseData<T>> {
     const url = `${config.baseUrl}/${id}`
     const method = config.usePatchForUpdate ? 'patch' : 'put'
-    const { data } = await api[method]<T>(url, payload as unknown)
+    const { data } = await api[method]<ResponseData<T>>(url, payload as unknown)
     const idx = findIndexById<T, Id>(items.value, idKey, id)
     if (idx >= 0) {
       const clone = [...items.value]
-      clone[idx] = data
+      clone[idx] = data.content
       items.value = clone
     }
     return data

@@ -15,3 +15,8 @@ export interface PaginationData<T> {
   content: Array<T>
   meta: MetaData
 }
+
+export interface ResponseData<T> {
+  content: T
+  meta: MetaData
+}

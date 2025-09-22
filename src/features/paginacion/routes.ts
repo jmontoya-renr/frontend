@@ -8,6 +8,6 @@ export const paginacion_route = {
   meta: { title: () => t('titles.zms.paginacion'), category: 'ZMS' },
 }
 
-const routes: RouteRecordRaw[] = [paginacion_route]
+const routes: Array<RouteRecordRaw> = [paginacion_route]
 
 export default routes

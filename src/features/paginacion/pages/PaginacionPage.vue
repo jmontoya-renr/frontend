@@ -2,6 +2,7 @@
 import { t } from '@/plugins/i18n'
 import { useRoute } from 'vue-router'
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
+import { CalendarDate, today, getLocalTimeZone, type DateValue } from '@internationalized/date'
 
 import { useAuthStore } from '@/features/auth/stores'
 import { useSolutionBus } from '@/shared/composables/useSolutionBus'
@@ -14,18 +15,36 @@ import type { Paginacion } from '../paginacion'
 
 import { columns } from '../columns'
 import DataTable from '@/shared/components/table/DataTable.vue'
-import { PERMISSION_TYPES } from '@/shared/utils/roles'
 
 const route = useRoute()
 const authStore = useAuthStore()
 
 import { useEmpresasCatalog } from '../catalogs/useEmpresasCatalog'
-import { useProductosCatalog } from '../catalogs/useProductosCatalog'
 
-const { ensureLoaded: ensureEmpresas } = useEmpresasCatalog()
-const { ensureLoaded: ensureProductos } = useProductosCatalog()
+const { ensureLoaded: ensureEmpresas, options, editableOptions } = useEmpresasCatalog()
 
 const dataTable = useTemplateRef('data-table')
+
+// Time zone (usa la local; si quieres fijo: 'Europe/Madrid')
+const tz = getLocalTimeZone()
+
+// Today as DateValue
+const todayDv: DateValue = today(tz)
+
+// First day of this month
+const firstDayOfThisMonth: DateValue = new CalendarDate(todayDv.year, todayDv.month, 1)
+
+// (Opcional) Si tu hijo espera strings YYYY-MM-DD:
+const todayStr = todayDv.toString()
+const firstDayStr = firstDayOfThisMonth.toString()
+
+function buildInitialFilters(): Record<string, string[]> {
+  return {
+    fecha_inicio: [firstDayStr],
+    fecha_fin: [todayStr],
+    empresas: options.value.map((e) => e.value),
+  }
+}
 
 // ======= CRUD con cursor (el composable maneja las filas) =======
 const {
@@ -39,22 +58,18 @@ const {
   setSort,
   clearSort,
   update: updateItem, // update en servidor (el composable sincroniza su items)
-  create: createItem,
 } = useCursorCrud<Paginacion, string | number, Partial<Paginacion>, Partial<Paginacion>>({
   baseUrl: 'http://localhost:9000/zms_paginacion',
   idKey: 'id',
   initialParams: {
-    filters: {
-      fecha_inicio: ['2000-01-01'],
-      fecha_fin: ['3000-01-01'],
-      empresas: ['ALI', 'ENA', 'ERM', 'EPN', 'NES'],
-    },
     limit: 50,
   },
 })
 
+const initialFilters = ref<Record<string, string[]>>({})
 // Handlers para pasar cambios al composable
 async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } | null) {
+  booting.value = false
   if (p) {
     setSort(p.sort_by, p.sort_order)
   } else {
@@ -63,16 +78,39 @@ async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } |
   await fetch() // reinicia (append desde cero en tu versión)
 }
 
-async function onServerFilters(f: Record<string, Array<string>>) {
-  setFilters(f) // limpia items + reset cursor
-  await fetch() // primera página (append sobre [])
+type ServerFilters = Record<string, string[]>
+
+/** Si una clave no viene en `incoming`, usa el valor por defecto de `initialFilters` */
+function mergeWithDefaults(incoming: ServerFilters): ServerFilters {
+  const base = initialFilters.value
+  // empezamos con los defaults calculados
+  const merged: ServerFilters = { ...base }
+  // sobrescribimos con lo que llegue (aunque venga vacío)
+  for (const [k, v] of Object.entries(incoming)) {
+    merged[k] = v
+  }
+  return merged
+}
+
+async function onServerFilters(f: ServerFilters) {
+  booting.value = false
+
+  // Rellenamos con defaults las claves ausentes
+  const merged = mergeWithDefaults(f)
+
+  // (Opcional) si quieres que la UI del DataTable/Toolbar muestre estos defaults
+  // cuando el usuario “limpia” un filtro, descomenta esta línea:
+  // initialFilters.value = merged
+
+  setFilters(merged) // limpia items + reset cursor en tu composable
+  await fetch() // primera página
 }
 
 // ======= Adaptadores para DataTable (sin duplicar filas) =======
 const isPaging = ref(false)
-
+const booting = ref(true)
 const status = computed<'pending' | 'success' | 'error'>(() => {
-  if (loading.value) return 'pending'
+  if (booting.value || loading.value) return 'pending'
   if (error.value) return 'error'
   return 'success'
 })
@@ -94,10 +132,10 @@ async function loadMore(): Promise<void> {
 // ======= Bus de solución y utilidades =======
 const getSolutionId = computed(() => {
   const solutionCode = route.name
-  return authStore.soluciones.find((sol) => sol.codigo === solutionCode)?.id
+  return authStore.soluciones.find((sol) => sol.codigo === solutionCode)?.id ?? null
 })
 
-const bus = useSolutionBus(getSolutionId.value!)
+const bus = useSolutionBus(getSolutionId.value ?? 0)
 
 function getFormattedFilename(title: string): string {
   const normalizedTitle = title.toLowerCase().replace(/\s+/g, '_')
@@ -134,11 +172,13 @@ const off = bus.on((e: SolutionEvent) => {
   if (e.type === 'customize') customize()
 })
 
-onBeforeUnmount(off)
+onBeforeUnmount(() => {
+  if (typeof off === 'function') off()
+})
 
 // ======= Edición de filas =======
 function isRowEditable(row: Paginacion, rowIndex: number) {
-  return authStore.canAccessEmpresaModulo(row.empresa, route.name as string, PERMISSION_TYPES.EDIT)
+  return editableOptions.value.map((e) => e.value).includes(row.empresa)
 }
 
 type RowCommitPayload = {
@@ -159,8 +199,8 @@ async function onRowCommit({ rowId, patch, onSuccess, onError }: RowCommitPayloa
 
 // ======= Montaje =======
 onMounted(async () => {
-  await Promise.all([ensureEmpresas(), ensureProductos()])
-  await fetch() // primera carga; `items` viene del composable
+  await ensureEmpresas()
+  initialFilters.value = buildInitialFilters()
 })
 </script>
 
@@ -184,6 +224,7 @@ onMounted(async () => {
         :is-fetching="isFetching"
         :is-fetching-next-page="isFetchingNextPage"
         :load-more="loadMore"
+        :initial-server-filters="initialFilters"
         @row-commit="onRowCommit"
         @server-sort="onServerSort"
         @server-filters="onServerFilters"

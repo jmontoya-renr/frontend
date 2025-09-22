@@ -64,6 +64,7 @@ const dv = computed<DateValue | undefined>({
 })
 
 const placeholder = ref<DateValue>(toDateValue(props.modelValue) ?? today(getLocalTimeZone()))
+
 watch(
   () => props.modelValue,
   (v) => {

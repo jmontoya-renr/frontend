@@ -1,4 +1,4 @@
-import type { ColumnDef } from '@tanstack/vue-table'
+import type { Column, ColumnDef } from '@tanstack/vue-table'
 import { h, nextTick, vShow, withDirectives } from 'vue'
 import type { Paginacion } from '@/features/paginacion/paginacion'
 import DataTableColumnHeader from '@/shared/components/table/DataTableColumnHeader.vue'
@@ -10,6 +10,7 @@ import { today, getLocalTimeZone, CalendarDate } from '@internationalized/date'
 
 import { useEmpresasCatalog, useProductosCatalog } from './catalogs'
 import { Checkbox } from '@/shared/components/ui/checkbox'
+import type { WithId } from '@/shared/types/with-id'
 
 const {
   loaded: empLoaded,
@@ -33,25 +34,32 @@ void ensureProductosLoaded()
 void ensureEmpresasLoaded()
 
 function focusAllText(e: FocusEvent, value: string) {
+  // Focus + safe select-all for text-like inputs only
   nextTick(() => {
     const el = e.target as HTMLElement | null
     if (!el) return
+    if (!el.isConnected) return // element got unmounted/replaced
 
-    // Siempre intenta enfocar
-    el.focus({ preventScroll: true })
+    try {
+      el.focus({ preventScroll: true })
+    } catch {
+      // ignore focus errors (rare)
+    }
 
-    // Selecciona solo si el tipo lo permite
     const input = el as HTMLInputElement | HTMLTextAreaElement
-    const isSelectableTextarea = input instanceof HTMLTextAreaElement
-    const isSelectableInput =
-      input instanceof HTMLInputElement &&
-      ['text', 'search', 'tel', 'url', 'password', 'email'].includes(input.type)
 
-    if (
-      (isSelectableTextarea || isSelectableInput) &&
-      typeof input.setSelectionRange === 'function'
-    ) {
-      input.setSelectionRange(0, value.length)
+    // Only select on text-like controls; NEVER on <input type="number">
+    const isTextArea = input instanceof HTMLTextAreaElement
+    const isTextInput =
+      input instanceof HTMLInputElement &&
+      ['text', 'search', 'tel', 'url', 'password'].includes(input.type)
+
+    if ((isTextArea || isTextInput) && typeof input.setSelectionRange === 'function') {
+      try {
+        input.setSelectionRange(0, value.length)
+      } catch {
+        // Some browsers can still throw if the control isn't ready; ignore gracefully
+      }
     }
   })
 }
@@ -59,31 +67,33 @@ function focusAllText(e: FocusEvent, value: string) {
 type BoundsOpts = {
   min?: number
   max?: number
-  integer?: boolean // por defecto true
-  allowEmpty?: boolean // por defecto false
+  integer?: boolean
+  allowEmpty?: boolean
+  decimals?: number // ⬅️ NUEVO: nº de decimales cuando integer=false
 }
 
-/** Devuelve handlers para <input type="number"> que:
- *  - bloquean e/E/+/-/. si es entero
- *  - acotan al rango [min, max] en cada input (también tras pegar)
- *  - llaman a onValue(n) con el número ya acotado
- */
 function bindNumberBounds(opts: BoundsOpts, onValue: (n: number) => void) {
   const integer = opts.integer ?? true
+  const decs = !integer && typeof opts.decimals === 'number' ? Math.max(0, opts.decimals) : null
 
   function clamp(n: number): number {
     if (!Number.isFinite(n)) n = opts.min ?? 0
     if (opts.min !== undefined && n < opts.min) n = opts.min
     if (opts.max !== undefined && n > opts.max) n = opts.max
-    return integer ? Math.trunc(n) : n
+    if (integer) return Math.trunc(n)
+    if (decs != null) {
+      const f = 10 ** decs
+      return Math.round(n * f) / f
+    }
+    return n
   }
 
   function normalizeAndCommit(el: HTMLInputElement) {
-    if (opts.allowEmpty && el.value === '') {
-      // no forzamos nada (útil si quisieras permitir vacío temporal)
-      return
-    }
-    let n = Number(el.value)
+    if (opts.allowEmpty && el.value === '') return
+    // soporta coma decimal
+    let raw = el.value.replace(',', '.')
+    if (raw === '.' || raw === '-.' || raw === '-,') raw = '0.'
+    let n = Number(raw)
     n = clamp(n)
     const next = String(n)
     if (el.value !== next) el.value = next
@@ -92,21 +102,19 @@ function bindNumberBounds(opts: BoundsOpts, onValue: (n: number) => void) {
 
   return {
     onKeydown(e: KeyboardEvent) {
-      // Evita escribir notación científica y signos si pedimos enteros no negativos
-      if (integer && ['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault()
-      // Si min >= 0, evita '-'
+      // bloquea notación científica y + siempre
+      if (['e', 'E', '+'].includes(e.key)) e.preventDefault()
+      // si min >= 0, bloquea '-'
       if ((opts.min ?? -Infinity) >= 0 && e.key === '-') e.preventDefault()
+      // el punto solo se bloquea si pedimos enteros
+      if (integer && e.key === '.') e.preventDefault()
     },
     onInput(e: Event) {
       const el = e.target as HTMLInputElement
       normalizeAndCommit(el)
     },
-    onPaste(e: ClipboardEvent) {
-      // Dejamos pegar y lo normalizamos en onInput inmediatamente
-      // (el orden de eventos del browser ya llama a input después)
-      // Si quieres bloquear texto no numérico, descomenta lo de abajo:
-      // const t = e.clipboardData?.getData('text') ?? ''
-      // if (!/^\d+$/.test(t)) e.preventDefault()
+    onPaste(_e: ClipboardEvent) {
+      /* normalizamos en onInput */
     },
     onBlur(e: FocusEvent) {
       const el = e.target as HTMLInputElement
@@ -142,6 +150,8 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       h(Checkbox, {
         modelValue: row.getIsSelected(),
         'onUpdate:modelValue': (value) => row.toggleSelected(!!value),
+        onClick: (e: MouseEvent) => e.stopPropagation(),
+        onMousedown: (e: MouseEvent) => e.stopPropagation(),
         ariaLabel: 'Select row',
         class: 'ml-2 translate-y-0.5',
       }),
@@ -149,6 +159,11 @@ export const columns: Array<ColumnDef<Paginacion>> = [
     enableHiding: false,
     enableResizing: false,
     size: 60,
+    minSize: 60,
+    maxSize: 60,
+    meta: {
+      fixedFirst: true,
+    },
   },
   /* === EMPRESA (select al editar) === */
   {
@@ -156,7 +171,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
     header: ({ column }) => {
       if (!empLoaded.value && !empLoading.value) void ensureEmpresasLoaded()
       return h(DataTableColumnHeader, {
-        column,
+        column: column as unknown as Column<WithId>,
         title: 'Sociedad',
         options: empresaEditableOptions.value,
       })
@@ -171,9 +186,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       const friendly = empresaByCodigo.value.get(String(value ?? ''))?.nombre ?? value ?? ''
 
       const createOnly = column.columnDef.meta?.createOnly === true
-      const isCreateRow = row.original?.__isNew === true
-      if (createOnly && !isCreateRow) return h('p', { class: 'truncate' }, friendly)
-      if (!isEditing) return h('p', { class: 'truncate' }, friendly)
+      if (createOnly && !isEditing) return h('p', { class: 'truncate' }, friendly)
 
       const opts: ReadonlyArray<SelectOption> = empresaEditableOptions.value
       const disabled = opts.length === 0 || empLoading.value
@@ -185,7 +198,6 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         disabled,
         loading: empLoading.value,
         clearable: false,
-        'data-keep-edit-open': '',
         // al cambiar la empresa, invalidamos producto si no coincide
         'onUpdate:modelValue': (next) => {
           const nextEmpresa = next ?? ''
@@ -216,9 +228,8 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         },
       })
     },
-    minSize: 100,
+    minSize: 200,
     size: 200,
-    maxSize: 250,
     meta: {
       editable: false,
       createOnly: true,
@@ -240,7 +251,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       // carga perezosa (una vez)
       if (!prodLoaded.value && !prodLoading.value) void ensureProductosLoaded()
       return h(DataTableColumnHeader, {
-        column,
+        column: column as unknown as Column<WithId>,
         title: 'Producto',
         // Puedes pasar todas las opciones (para filtros), o dejarlo vacío.
         // options: [...new Set(prodList.value.map(p => ({label: p.nombre, value: p.codigo})))],
@@ -272,8 +283,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         ''
 
       const createOnly = !!column.columnDef.meta?.createOnly
-      const isCreateRow = row.original?.__isNew === true
-      const canEditHere = (createOnly ? isCreateRow : true) && isEditing
+      const canEditHere = !createOnly && isEditing
       if (!canEditHere) return h('p', { class: 'truncate' }, friendly)
 
       const disabled = !empresaCode || prodLoading.value
@@ -285,7 +295,6 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         disabled,
         loading: prodLoading.value,
         clearable: false,
-        'data-keep-edit-open': '',
         'onUpdate:modelValue': (next) => {
           table.options.meta?.setRowField?.(
             row.index,
@@ -296,8 +305,8 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         },
       })
     },
-    minSize: 300,
-    size: 400,
+    minSize: 200,
+    size: 200,
     // Editable SOLO en creación de fila:
     meta: {
       editable: false,
@@ -349,7 +358,8 @@ export const columns: Array<ColumnDef<Paginacion>> = [
   /* === FECHA (vista larga, input date al editar) === */
   {
     accessorKey: 'fecha',
-    header: ({ column }) => h(DataTableColumnHeader, { column, title: 'Fecha' }),
+    header: ({ column }) =>
+      h(DataTableColumnHeader, { column: column as unknown as Column<WithId>, title: 'Fecha' }),
     cell: ({ row, column, table }) => {
       const isEditing = table.options.meta?.isCellEditing?.(row.index, column.getIndex()) ?? false
       const value = (table.options.meta?.getCellValue?.(row.index, 'fecha', row.original) ??
@@ -378,8 +388,9 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         },
       })
     },
-    minSize: 160,
+    minSize: 170,
     size: 200,
+    maxSize: 230,
     meta: {
       editable: false,
       createOnly: true,
@@ -389,7 +400,11 @@ export const columns: Array<ColumnDef<Paginacion>> = [
   /* === num_paginas (input number al editar) === */
   {
     accessorKey: 'num_paginas',
-    header: ({ column }) => h(DataTableColumnHeader, { column, title: 'Número de páginas' }),
+    header: ({ column }) =>
+      h(DataTableColumnHeader, {
+        column: column as unknown as Column<WithId>,
+        title: 'Número de páginas',
+      }),
     cell: ({ row, column, table }) => {
       const isEditing = table.options.meta?.isCellEditing?.(row.index, column.getIndex()) ?? false
       const value = (table.options.meta?.getCellValue?.(row.index, 'num_paginas', row.original) ??
@@ -421,13 +436,18 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         withDirectives(view, [[vShow, !isEditing]]),
       ]
     },
-    minSize: 120,
-    size: 150,
+    minSize: 180,
+    size: 200,
+    maxSize: 220,
     meta: { editable: true },
   },
   {
     accessorKey: 'num_clasificados',
-    header: ({ column }) => h(DataTableColumnHeader, { column, title: 'Número de clasificados' }),
+    header: ({ column }) =>
+      h(DataTableColumnHeader, {
+        column: column as unknown as Column<WithId>,
+        title: 'Número de clasificados',
+      }),
     cell: ({ row, column, table }) => {
       const isEditing = table.options.meta?.isCellEditing?.(row.index, column.getIndex()) ?? false
       const value = (table.options.meta?.getCellValue?.(
@@ -436,7 +456,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         row.original,
       ) ?? row.getValue('num_clasificados')) as number | string | null
 
-      const handlers = bindNumberBounds({ min: 0, max: 999, integer: true }, (n) =>
+      const handlers = bindNumberBounds({ min: 0, max: 999.99, integer: false, decimals: 2 }, (n) =>
         table.options.meta?.setRowField?.(
           row.index,
           'num_clasificados',
@@ -448,10 +468,10 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       const input = h('input', {
         class: 'w-full bg-transparent outline-none border-0 m-0 min-w-0',
         type: 'number',
-        step: '1',
+        step: '0.01',
         min: '0',
-        max: '999',
-        inputmode: 'numeric',
+        max: '999.99',
+        inputmode: 'decimal',
         value: value ?? '',
         ...handlers,
         onFocus: (e: FocusEvent) => focusAllText(e, String(value ?? '')),
@@ -469,13 +489,17 @@ export const columns: Array<ColumnDef<Paginacion>> = [
   },
   {
     accessorKey: 'num_extras',
-    header: ({ column }) => h(DataTableColumnHeader, { column, title: 'Número de extras' }),
+    header: ({ column }) =>
+      h(DataTableColumnHeader, {
+        column: column as unknown as Column<WithId>,
+        title: 'Número de extras',
+      }),
     cell: ({ row, column, table }) => {
       const isEditing = table.options.meta?.isCellEditing?.(row.index, column.getIndex()) ?? false
       const value = (table.options.meta?.getCellValue?.(row.index, 'num_extras', row.original) ??
         row.getValue('num_extras')) as number | string | null
 
-      const handlers = bindNumberBounds({ min: 0, max: 999, integer: true }, (n) =>
+      const handlers = bindNumberBounds({ min: 0, max: 999.99, integer: false, decimals: 2 }, (n) =>
         table.options.meta?.setRowField?.(
           row.index,
           'num_extras',
@@ -487,10 +511,10 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       const input = h('input', {
         class: 'w-full bg-transparent outline-none border-0 m-0 min-w-0',
         type: 'number',
-        step: '1',
+        step: '0.01',
         min: '0',
-        max: '999',
-        inputmode: 'numeric',
+        max: '999.99',
+        inputmode: 'decimal',
         value: value ?? '',
         ...handlers,
         onFocus: (e: FocusEvent) => focusAllText(e, String(value ?? '')),

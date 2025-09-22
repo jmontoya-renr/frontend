@@ -6,7 +6,7 @@ function useBreadcrumbs() {
 
   const breadcrumbs = computed(() => {
     const matched = route.matched.map((r) => {
-      const title = r.meta.title
+      const title = r.meta.childLabel ?? r.meta.title
       const titleValue = typeof title === 'function' ? title() : title
 
       return {

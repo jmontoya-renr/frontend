@@ -1,57 +1,172 @@
 <script setup lang="ts">
 import { t } from '@/plugins/i18n'
-import { useRoute } from 'vue-router'
-import { computed, onBeforeUnmount, onMounted, useTemplateRef } from 'vue'
+import { useRoute, type RouteRecordName } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 
 import { useAuthStore } from '@/features/auth/stores'
 import { useSolutionBus } from '@/shared/composables/useSolutionBus'
-import { useCursorPagination } from '@/shared/composables/table/useCursorPagination'
+import { CalendarDate, today, getLocalTimeZone, type DateValue } from '@internationalized/date'
+
+// ➜ Usamos tu nuevo composable
+import { useCursorCrud } from '@/shared/composables/table/useCursorCrud'
 
 import { convertToCSV, downloadCSV } from '@/shared/utils/csv-helpers'
+import type { GastoEvento } from '../gasto_evento'
 
-import type { Task } from '@/shared/components/data/schema'
-
-import { columns } from '@/shared/components/table/columns'
+import { columns } from '@/features/gasto_evento/columns'
 import DataTable from '@/shared/components/table/DataTable.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
 
+import { useEmpresasCatalog } from '../catalogs/useEmpresasCatalog'
+
+const { ensureLoaded: ensureEmpresas, options, editableOptions } = useEmpresasCatalog()
+
 const dataTable = useTemplateRef('data-table')
 
-const { status, allItems, loadMore, hasNextPage, isFetching, isFetchingNextPage, error } =
-  useCursorPagination<Task>('')
+// Time zone (usa la local; si quieres fijo: 'Europe/Madrid')
+const tz = getLocalTimeZone()
 
-// Computed para verificar si la página está en el array de soluciones
-const getSolutionId = computed(() => {
-  const solutionCode = route.name // O usa route.path dependiendo de tu ruta
-  return authStore.soluciones.find((sol) => sol.codigo === solutionCode)?.id
+// Today as DateValue
+const todayDv: DateValue = today(tz)
+
+// First day of this month
+const firstDayOfThisMonth: DateValue = new CalendarDate(todayDv.year, todayDv.month, 1)
+
+// (Opcional) Si tu hijo espera strings YYYY-MM-DD:
+const todayStr = todayDv.toString()
+const firstDayStr = firstDayOfThisMonth.toString()
+
+function buildInitialFilters(): Record<string, string[]> {
+  return {
+    fecha_inicio: [firstDayStr],
+    fecha_fin: [todayStr],
+    empresas: options.value.map((e) => e.value),
+  }
+}
+
+// ======= CRUD con cursor (el composable maneja las filas) =======
+const {
+  items,
+  loading,
+  error,
+  hasNext,
+  fetch,
+  nextPage,
+  setFilters,
+  setSort,
+  clearSort,
+  update: updateItem, // update en servidor (el composable sincroniza su items)
+} = useCursorCrud<GastoEvento, string | number, Partial<GastoEvento>, Partial<GastoEvento>>({
+  baseUrl: 'http://localhost:9000/pbi_gasto',
+  idKey: 'id',
+  initialParams: {
+    limit: 50,
+  },
 })
 
-const bus = useSolutionBus(getSolutionId.value!)
+const initialFilters = ref<Record<string, string[]>>({})
+// Handlers para pasar cambios al composable
+async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } | null) {
+  booting.value = false
+  if (p) {
+    setSort(p.sort_by, p.sort_order)
+  } else {
+    clearSort()
+  }
+  await fetch() // reinicia (append desde cero en tu versión)
+}
+
+type ServerFilters = Record<string, string[]>
+
+/** Si una clave no viene en `incoming`, usa el valor por defecto de `initialFilters` */
+function mergeWithDefaults(incoming: ServerFilters): ServerFilters {
+  const base = initialFilters.value
+  // empezamos con los defaults calculados
+  const merged: ServerFilters = { ...base }
+  // sobrescribimos con lo que llegue (aunque venga vacío)
+  for (const [k, v] of Object.entries(incoming)) {
+    merged[k] = v
+  }
+  return merged
+}
+
+async function onServerFilters(f: ServerFilters) {
+  booting.value = false
+
+  // Rellenamos con defaults las claves ausentes
+  const merged = mergeWithDefaults(f)
+
+  // (Opcional) si quieres que la UI del DataTable/Toolbar muestre estos defaults
+  // cuando el usuario “limpia” un filtro, descomenta esta línea:
+  // initialFilters.value = merged
+
+  setFilters(merged) // limpia items + reset cursor en tu composable
+  await fetch() // primera página
+}
+
+// ======= Adaptadores para DataTable (sin duplicar filas) =======
+const isPaging = ref(false)
+const booting = ref(true)
+const status = computed<'pending' | 'success' | 'error'>(() => {
+  if (booting.value || loading.value) return 'pending'
+  if (error.value) return 'error'
+  return 'success'
+})
+
+const hasNextPage = computed(() => hasNext.value)
+const isFetching = computed(() => loading.value)
+const isFetchingNextPage = computed(() => loading.value && isPaging.value)
+
+async function loadMore(): Promise<void> {
+  if (!hasNextPage.value) return
+  isPaging.value = true
+  try {
+    await nextPage() // el composable añade/gestiona sus items
+  } finally {
+    isPaging.value = false
+  }
+}
+
+// ======= Bus de solución y utilidades =======
+const SEP = '::' as const
+
+// type guard for route names
+const isStrName = (n: RouteRecordName | null | undefined): n is string =>
+  typeof n === 'string' && n.length > 0
+
+// extract solutionId from "SOLUTION::page"
+const extractSolutionId = (fullName: string): string => {
+  const i = fullName.indexOf(SEP)
+  return i === -1 ? fullName : fullName.slice(0, i)
+}
+
+const getSolutionId = computed<number | undefined>(() => {
+  if (!isStrName(route.name)) return undefined
+
+  const fullCode = route.name
+
+  const solCode = extractSolutionId(fullCode)
+  const bySolution = authStore.soluciones.find((s) => s.codigo === solCode)
+  if (bySolution) return bySolution.id
+
+  return undefined
+})
+
+const bus = useSolutionBus(getSolutionId.value ?? 0)
 
 function getFormattedFilename(title: string): string {
-  // Normalizar el título a minúsculas y reemplazar los espacios por guiones bajos
   const normalizedTitle = title.toLowerCase().replace(/\s+/g, '_')
-
-  // Obtener la fecha actual en formato YYYY-MM-DD
   const today = new Date()
-  const formattedDate = today.toISOString().split('T')[0] // Solo la parte de la fecha (YYYY-MM-DD)
-
-  // Combinar el título y la fecha
+  const formattedDate = today.toISOString().split('T')[0]
   return `${normalizedTitle}_${formattedDate}.csv`
 }
 
-// Tus funciones reales
 function exportLocal() {
-  // Obtener los registros de la tabla
-  const recordsToExport = allItems.value
-
+  const recordsToExport = items.value // usamos directamente las filas del composable
   if (recordsToExport.length > 0) {
-    // Convertir los registros a formato CSV
     const csvContent = convertToCSV(recordsToExport)
-
-    // Descargar el archivo CSV
     const name = t('titles.pbi.gastos_eventos')
     const filename = getFormattedFilename(name)
     downloadCSV(csvContent, filename)
@@ -70,38 +185,42 @@ function customize() {
 
 type SolutionEvent = { type: 'export:local' } | { type: 'export:remote' } | { type: 'customize' }
 
-// Suscripción
 const off = bus.on((e: SolutionEvent) => {
   if (e.type === 'export:local') exportLocal()
   if (e.type === 'export:remote') exportRemote()
   if (e.type === 'customize') customize()
 })
 
-onBeforeUnmount(off)
+onBeforeUnmount(() => {
+  if (typeof off === 'function') off()
+})
 
-function isRowEditable(row: Task, rowIndex: number) {
-  const isEditable = !row.id.includes('8') && rowIndex >= 0
-  return isEditable
+// ======= Edición de filas =======
+function isRowEditable(row: GastoEvento, rowIndex: number) {
+  return editableOptions.value.map((e) => e.value).includes(row.empresa)
 }
 
 type RowCommitPayload = {
-  rowId: string
-  patch: Partial<Task>
+  rowId: string | number
+  patch: Partial<GastoEvento>
   onSuccess: () => void
   onError: (err?: unknown) => void
-  // opcionales que también llegan: rowIndex?: number; full?: Task; reason?: string
 }
 
 async function onRowCommit({ rowId, patch, onSuccess, onError }: RowCommitPayload) {
   try {
-    console.log(allItems.value, rowId, patch)
-    onSuccess() // limpia pending/drafts en la tabla
+    await updateItem(rowId, patch) // el composable actualiza su `items` internamente
+    onSuccess()
   } catch (e) {
     onError(e)
   }
 }
 
-onMounted(() => {})
+// ======= Montaje =======
+onMounted(async () => {
+  await ensureEmpresas()
+  initialFilters.value = buildInitialFilters()
+})
 </script>
 
 <template>
@@ -114,7 +233,7 @@ onMounted(() => {})
     <section class="flex-1 min-h-0 min-w-0 flex flex-col space-y-4">
       <DataTable
         ref="data-table"
-        :records="allItems"
+        :records="items"
         :columns="columns"
         :persist-key="`${route.name as string}-${authStore.user.id}`"
         :is-row-editable="isRowEditable"
@@ -124,7 +243,10 @@ onMounted(() => {})
         :is-fetching="isFetching"
         :is-fetching-next-page="isFetchingNextPage"
         :load-more="loadMore"
+        :initial-server-filters="initialFilters"
         @row-commit="onRowCommit"
+        @server-sort="onServerSort"
+        @server-filters="onServerFilters"
       />
     </section>
   </section>

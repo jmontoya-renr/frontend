@@ -3,11 +3,11 @@ import staticRoutes, { notFoundRoute } from '@/router/routes.static'
 
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
-const modules = import.meta.glob<{ default: RouteRecordRaw[] }>('@/features/**/routes.ts', {
+const modules = import.meta.glob<{ default: Array<RouteRecordRaw> }>('@/features/**/routes.ts', {
   eager: true,
 })
 
-const featureRoutes: RouteRecordRaw[] = Object.values(modules).flatMap((m) => m.default || [])
+const featureRoutes: Array<RouteRecordRaw> = Object.values(modules).flatMap((m) => m.default || [])
 
 export const routes = [...staticRoutes, ...featureRoutes, notFoundRoute]
 

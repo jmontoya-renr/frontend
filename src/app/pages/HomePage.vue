@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-
+import { useRouter, type RouteRecordName, type RouteRecordNormalized } from 'vue-router'
 import { ChevronRight } from 'lucide-vue-next'
 
 import { Input } from '@/shared/components/ui/input'
@@ -19,15 +18,57 @@ import { useAuthStore } from '@/features/auth/stores'
 const router = useRouter()
 const auth = useAuthStore()
 
-const allSolutionRoutes = computed(() =>
-  router.getRoutes().filter((r) => auth.soluciones.some((s) => s.codigo === r.name)),
-)
+// --- helpers for "SOLUTION::page" convention ---
+const SEP = '::' as const
+const isStrName = (n: RouteRecordName | null | undefined): n is string =>
+  typeof n === 'string' && n.length > 0
+
+type ParsedName = { solutionId?: string; pageCode: string }
+const parseName = (n: RouteRecordName | null | undefined): ParsedName => {
+  if (!isStrName(n)) return { pageCode: '' }
+  const i = n.indexOf(SEP)
+  return i === -1
+    ? { pageCode: n }
+    : { solutionId: n.slice(0, i), pageCode: n.slice(i + SEP.length) }
+}
+
+// Only show one card per solution: the child with path '' (i.e., pageCode === "index")
+const solutionIndexRoutes = computed<RouteRecordNormalized[]>(() => {
+  const allowed = new Set<string>(auth.soluciones.map((s) => s.codigo))
+
+  // Stage 1: allowed by full route name OR by solutionId (prefix)
+  const candidates = router.getRoutes().filter((r) => {
+    if (!isStrName(r.name)) return false
+    const { solutionId } = parseName(r.name)
+    if (allowed.has(r.name)) return true
+    return !!solutionId && allowed.has(solutionId)
+  })
+
+  // Stage 2: keep only one per solution, preferring "::index"
+  const bySolution = new Map<string, RouteRecordNormalized>()
+  const singles: RouteRecordNormalized[] = []
+
+  for (const r of candidates) {
+    const { solutionId, pageCode } = parseName(r.name)
+    if (solutionId) {
+      const current = bySolution.get(solutionId)
+      // Prefer the index page; if none stored yet, take whatever we have
+      if (!current || pageCode === 'index') {
+        bySolution.set(solutionId, r)
+      }
+    } else {
+      // No solution marker -> keep as-is (optional: drop if you want only solutions)
+      singles.push(r)
+    }
+  }
+
+  return [...bySolution.values(), ...singles]
+})
 
 const CAT_ALL = '__ALL__'
 const CAT_NONE = '__NONE__'
 
 const selectedCategory = ref<string>(CAT_ALL)
-
 const query = ref('')
 
 /** Normalize solution view models */
@@ -39,7 +80,7 @@ type SolutionItem = {
 }
 
 const normalized = computed<SolutionItem[]>(() =>
-  allSolutionRoutes.value.map((r) => {
+  solutionIndexRoutes.value.map((r) => {
     const title = typeof r.meta.title === 'function' ? r.meta.title() : r.meta.title
     const display = title ?? (typeof r.name === 'string' ? r.name : r.path)
     const first = display.trim().charAt(0).toUpperCase() || '#'
@@ -49,10 +90,10 @@ const normalized = computed<SolutionItem[]>(() =>
         : null
 
     return {
-      name: String(r.name),
-      displayName: display,
-      firstLetter: first,
-      category,
+      name: String(r.name), // will be "SOLUTION::index" for solution cards
+      displayName: display, // nice label (usually solution title)
+      firstLetter: first, // badge
+      category, // used for grouping/filtering
     }
   }),
 )

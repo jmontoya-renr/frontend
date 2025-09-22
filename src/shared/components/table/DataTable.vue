@@ -34,7 +34,7 @@ import { Skeleton } from '@/shared/components/ui/skeleton'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import type { WithId } from '@/shared/types/with-id'
 
-import { useEventListener, useThrottleFn } from '@vueuse/core'
+import { useDebounceFn, useEventListener, useThrottleFn } from '@vueuse/core'
 
 interface DataTableProps<T> {
   columns: Array<ColumnDef<T, unknown>>
@@ -46,6 +46,7 @@ interface DataTableProps<T> {
   hasNextPage?: boolean
   isFetchingNextPage?: boolean
   disableNewRows?: boolean
+  initialServerFilters?: Record<string, string[]>
   loadMore?: () => void | Promise<void>
   isRowEditable?: (row: T, rowIndex: number) => boolean
 }
@@ -70,12 +71,99 @@ const emit = defineEmits<{
   (e: 'server-filters', payload: Record<string, Array<string>>): void
 }>()
 
+/** ===== Tipos & helpers para filtros iniciales (server -> TanStack) ===== */
+type RowCommitReason = 'row-change' | 'edit-exit' | 'unmount'
+
+type FilterMeta =
+  | { type: 'text'; param?: string }
+  | { type: 'multiSelect'; param: string }
+  | { type: 'dateRange'; serverKeys?: { from?: string; to?: string } }
+
+type DateRangeValue = { from?: string; to?: string }
+
+/** Obtiene el id “declarado” de un ColumnDef (id o accessorKey) */
+function getColumnId<T>(c: ColumnDef<T, unknown>): string | null {
+  const byId = (c as { id?: string }).id
+  if (byId) return byId
+  const byAccessor = (c as { accessorKey?: string }).accessorKey
+  return byAccessor ?? null
+}
+
+/** Aplana columnas (por si hay columnas agrupadas) */
+function flattenColumns<T>(cols: Array<ColumnDef<T, unknown>>): Array<ColumnDef<T, unknown>> {
+  const out: Array<ColumnDef<T, unknown>> = []
+  const walk = (arr: Array<ColumnDef<T, unknown>>): void => {
+    for (const c of arr) {
+      const maybeGroup = c as unknown as { columns?: Array<ColumnDef<T, unknown>> }
+      if (maybeGroup.columns && maybeGroup.columns.length) walk(maybeGroup.columns)
+      else out.push(c)
+    }
+  }
+  walk(cols)
+  return out
+}
+
+/** Traduce Record<string, string[]> del servidor a ColumnFiltersState de TanStack */
+function fromServerToColumnFilters<T>(
+  cols: Array<ColumnDef<T, unknown>>,
+  server: Record<string, string[]>,
+): ColumnFiltersState {
+  const leafs = flattenColumns(cols)
+  const res: ColumnFiltersState = []
+
+  for (const c of leafs) {
+    const id = getColumnId(c)
+    if (!id) continue
+
+    const meta = c.meta?.filter as FilterMeta | undefined
+
+    // Sin meta -> fallback: usa la clave tal cual
+    if (!meta) {
+      const arr = server[id]
+      if (Array.isArray(arr) && arr.length) res.push({ id, value: arr })
+      continue
+    }
+
+    if (meta.type === 'text') {
+      const key = meta.param || id
+      const v = server[key]?.[0] ?? ''
+      if (v) res.push({ id, value: v })
+      continue
+    }
+
+    if (meta.type === 'multiSelect') {
+      const key = meta.param
+      const raw = server[key] ?? []
+      const arr: string[] = Array.isArray(raw) ? raw.map((x) => String(x)).filter(Boolean) : []
+      if (arr.length) res.push({ id, value: arr })
+      continue
+    }
+
+    if (meta.type === 'dateRange') {
+      const fromKey = meta.serverKeys?.from ?? `${id}_from`
+      const toKey = meta.serverKeys?.to ?? `${id}_to`
+      const from = server[fromKey]?.[0]
+      const to = server[toKey]?.[0]
+      if (from || to) {
+        const vr: DateRangeValue = {}
+        if (from) vr.from = from
+        if (to) vr.to = to
+        res.push({ id, value: vr })
+      }
+      continue
+    }
+  }
+
+  return res
+}
+
 /* ========= SECCIÓN 2: Estado ========= */
 const sorting = ref<SortingState>([])
 const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
 const rowSelection = ref<Record<string, boolean>>({})
 const viewOptions = useTemplateRef('view-options')
+const initialColumnFiltersDefault = ref<ColumnFiltersState>([])
 
 const columnOrder = ref<Array<string>>([])
 const columnSizing = ref<Record<string, number>>({})
@@ -95,7 +183,9 @@ const setCellRef = (id: string, el: HTMLTableCellElement | null) => (cellEls.val
 
 const SKELETON_ROWS = 10
 const leafColumns = computed(() => table.getAllLeafColumns())
-const isLoaderIndex = (i: number) => props.hasNextPage && i >= rowCount.value
+// Considera loader cualquier índice >= rowCount aunque hasNextPage sea false.
+// Así, en transiciones (p.ej. filas → []), nunca accederemos a rows[vr.index].
+const isLoaderIndex = (i: number): boolean => i >= rowCount.value
 
 /** Eddited data */
 // Helpers
@@ -103,6 +193,11 @@ const rowDrafts = ref<Record<string, Partial<T>>>({})
 
 // Obtener el id de la fila actual
 const rowIdAt = (i: number): string => rows.value[i]?.id ?? ''
+
+function rowIndexOf(original: T): number {
+  const id = String(original.id)
+  return rows.value.findIndex((r) => r.id === id)
+}
 
 // Obtener el valor de una celda editada, si existe
 function getCellValue<K extends keyof T>(i: number, colId: K, originalRow: T): T[K] {
@@ -234,16 +329,27 @@ const table = useVueTable({
     isCellDirtyById,
     isCellEditing: (rowIndex: number, colIndex: number) =>
       isEditing.value && activeRowIndex.value === rowIndex && activeColIndex.value === colIndex,
+    commitRowAt: (rowIndex: number, reason: RowCommitReason = 'row-change'): boolean => {
+      return commitRow(rowIndex, reason)
+    },
+    commitRowAtAsync: (rowIndex: number, reason: RowCommitReason = 'row-change'): Promise<void> => {
+      return commitRowPromise(rowIndex, reason)
+    },
+    commitOriginalAsync: (original: T, reason: RowCommitReason = 'row-change'): Promise<void> => {
+      const idx = rowIndexOf(original)
+      if (idx < 0) return Promise.resolve()
+      return commitRowPromise(idx, reason)
+    },
   },
 })
 
 type TablePrefs = {
   v: number
-  sorting?: SortingState
   columnVisibility?: VisibilityState
   columnOrder?: string[]
   columnSizing?: Record<string, number>
 }
+
 const PREFS_VERSION = 1
 const prefsKey = computed(() =>
   props.persistKey ? `datatable:${props.persistKey}:v${PREFS_VERSION}` : null,
@@ -271,7 +377,6 @@ function savePrefsDebounced() {
     const st = table.getState() as TableState
     const data: TablePrefs = {
       v: PREFS_VERSION,
-      sorting: sorting.value,
       columnVisibility: columnVisibility.value,
       columnOrder: st.columnOrder,
       columnSizing: st.columnSizing,
@@ -299,10 +404,28 @@ function filterSizing(saved: Record<string, number> | undefined) {
 // 5) ---- Restaurar al montar
 const suppressServerSync = ref(true)
 
+watch(
+  () => props.initialServerFilters,
+  (nf) => {
+    // 1) bloquea emisiones mientras hidratamos
+    suppressServerSync.value = true
+
+    // 2) aplica filtros iniciales
+    const next = nf ? fromServerToColumnFilters(props.columns, nf) : []
+    columnFilters.value = next
+    initialColumnFiltersDefault.value = next
+
+    // 4) reabre emisiones después del siguiente tick
+    nextTick(() => {
+      suppressServerSync.value = false
+    })
+  },
+  { deep: true, immediate: true, flush: 'sync' }, // <- importante
+)
+
 onMounted(() => {
   const prefs = loadPrefs()
   if (prefs) {
-    if (prefs.sorting) sorting.value = prefs.sorting
     if (prefs.columnVisibility) columnVisibility.value = prefs.columnVisibility
     if (prefs.columnOrder) table.setColumnOrder(mergeOrder(prefs.columnOrder))
     if (prefs.columnSizing) table.setColumnSizing(filterSizing(prefs.columnSizing))
@@ -313,7 +436,7 @@ onMounted(() => {
 })
 
 // 6) ---- Guardar ante cambios (deep para sizing/visibility)
-watch([sorting, columnVisibility, columnOrder, columnSizing], savePrefsDebounced, { deep: true })
+watch([columnVisibility, columnOrder, columnSizing], savePrefsDebounced, { deep: true })
 
 // 7) ---- (opcional) Sincronizar entre pestañas
 let onStorage: ((e: StorageEvent) => void) | null = null
@@ -323,7 +446,6 @@ if (typeof window !== 'undefined') {
     if (e.key !== prefsKey.value) return
     const prefs = safeParse<TablePrefs>(e.newValue)
     if (!prefs) return
-    if (prefs.sorting) sorting.value = prefs.sorting
     if (prefs.columnVisibility) columnVisibility.value = prefs.columnVisibility
     if (prefs.columnOrder) table.setColumnOrder(mergeOrder(prefs.columnOrder))
     if (prefs.columnSizing) table.setColumnSizing(filterSizing(prefs.columnSizing))
@@ -382,11 +504,11 @@ function mapFiltersToServer(fs: ColumnFiltersState): Record<string, Array<string
     if (meta.type === 'multiSelect') {
       const key = meta.param
       const arr = Array.isArray(raw)
-        ? raw.map(String).filter(Boolean)
+        ? raw.map(String).filter((s) => s.length > 0)
         : raw == null
           ? []
-          : [String(raw)].filter(Boolean)
-      if (arr.length) out[key] = arr
+          : [String(raw)].filter((s) => s.length > 0)
+      out[key] = arr
       continue
     }
 
@@ -414,22 +536,24 @@ function mapSortingToServer(
   return { sort_by: first.id, sort_order: first.desc ? 'desc' : 'asc' }
 }
 
+const emitServerSort = useDebounceFn((s: SortingState) => {
+  if (suppressServerSync.value) return
+  emit('server-sort', mapSortingToServer(s))
+}, 250) // ajusta el delay a tu gusto
+
 watch(
   () => sorting.value,
-  (s) => {
-    if (suppressServerSync.value) return
-    const payload = mapSortingToServer(s) // {sort_by, sort_order} | null
-    emit('server-sort', payload)
-  },
+  (s) => emitServerSort(s),
   { deep: true },
 )
+const emitServerFilters = useDebounceFn((cf: ColumnFiltersState) => {
+  if (suppressServerSync.value) return
+  emit('server-filters', mapFiltersToServer(cf))
+}, 250)
 
 watch(
   () => columnFilters.value,
-  (cf) => {
-    if (suppressServerSync.value) return
-    emit('server-filters', mapFiltersToServer(cf))
-  },
+  (cf) => emitServerFilters(cf),
   { deep: true },
 )
 
@@ -483,7 +607,7 @@ function getRowPatch(i: number): Partial<T> | null {
   return patch && Object.keys(patch).length ? patch : null
 }
 
-function commitRow(i: number, reason: 'row-change' | 'edit-exit' | 'unmount'): boolean {
+function commitRow(i: number, reason: RowCommitReason): boolean {
   const id = rowIdAt(i)
   if (!id) return false
   if (rowPending.value[id]) return false // evita commits duplicados
@@ -522,6 +646,35 @@ function commitRow(i: number, reason: 'row-change' | 'edit-exit' | 'unmount'): b
   emit('row-commit', { rowIndex: i, rowId: original.id, patch, full, reason, onSuccess, onError })
 
   return true
+}
+
+function commitRowPromise(i: number, reason: RowCommitReason): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const ok = commitRow(i, reason)
+    if (!ok) return resolve()
+
+    const id = rowIdAt(i)
+
+    // First, give the same-tick chance to clear
+    queueMicrotask(() => {
+      if (!rowPending.value[id]) {
+        resolve()
+        return
+      }
+
+      // Then, watch the specific key and resolve when it becomes falsy
+      const stop = watch(
+        () => rowPending.value[id], // tracks add/remove and true->false
+        (pending) => {
+          if (!pending) {
+            stop()
+            resolve()
+          }
+        },
+        { flush: 'post' },
+      )
+    })
+  })
 }
 
 // (opcional) por si quieres descartar cambios de la fila activa al cancelar:
@@ -740,12 +893,22 @@ function endEdit(
 }
 
 /* ========= SECCIÓN 8: Eventos de celda ========= */
-function onCellClick(i: number, j: number) {
+function onCellClick(i: number, j: number, e: MouseEvent) {
+  if (isInteractiveElement(e.target)) {
+    // Keep focus for accessibility but don't alter rowSelection
+    activeRowIndex.value = i
+    activeColIndex.value = j
+    return
+  }
+
+  // Optional: support additive selection with Ctrl/Cmd
+  const additive = e.ctrlKey || e.metaKey
   const isSameCell = i === activeRowIndex.value && j === activeColIndex.value
 
   if (isSameCell) {
     if (isEditing.value) return
     if (isCellEditable(i, j)) enterEditMode(i, j)
+    else focusCellByIndex(i, j, { select: true, additive })
     return
   }
 
@@ -944,18 +1107,21 @@ defineExpose({
 onMounted(() => {
   const onPointerDown = (e: PointerEvent) => {
     const t = e.target as HTMLElement
-    if (t.closest('[data-keep-edit-open]')) return
+    if (
+      t.closest('[data-keep-edit-open],[role="listbox"],[role="dialog"],[aria-haspopup="listbox"]')
+    )
+      return
     const container = containerRef.value
-    if (container && !container.contains(t as Node)) {
-      if (isEditing.value) {
-        endEdit(true, undefined, { refocus: false })
-      } else {
-        clearCellFocus({ clearSelection: false, focusContainer: false })
-      }
+    if (!container) return
+    if (container.contains(t as Node)) return
+    if (isEditing.value) {
+      return endEdit(true, undefined, { refocus: false })
     }
+    clearCellFocus({ clearSelection: false, focusContainer: false })
   }
+
   if (typeof window !== 'undefined') {
-    useEventListener(document, 'pointerdown', onPointerDown, { capture: true }) // 🔧 MOD
+    useEventListener(document, 'pointerdown', onPointerDown, { capture: true })
   }
 })
 
@@ -968,7 +1134,7 @@ onBeforeUnmount(() => {
 
 <template>
   <DataTableViewOptions ref="view-options" :table="table" />
-  <DataTableToolbar :table="table" />
+  <DataTableToolbar :table="table" :initial-column-filters="initialColumnFiltersDefault" />
 
   <p class="sr-only" aria-live="polite">{{ liveMessage }}</p>
 
@@ -1106,7 +1272,9 @@ onBeforeUnmount(() => {
               :ref="
                 (el) =>
                   setRowRef(
-                    !isLoaderIndex(vr.index) ? rows[vr.index].id : '__loader__',
+                    !isLoaderIndex(vr.index) && rows[vr.index]
+                      ? rows[vr.index]!.id
+                      : `__loader__-${vr.index}`,
                     el as HTMLTableRowElement | null,
                   )
               "
@@ -1157,7 +1325,7 @@ onBeforeUnmount(() => {
                   :ref="(el) => setCellRef(cell.id, el as HTMLTableCellElement | null)"
                   class="align-middle"
                   :style="{ width: `${cell.column.getSize()}px` }"
-                  @click="() => onCellClick(vr.index, j)"
+                  @click="(ev) => onCellClick(vr.index, j, ev)"
                   @dblclick="() => onCellDblClick(vr.index, j)"
                 >
                   <div

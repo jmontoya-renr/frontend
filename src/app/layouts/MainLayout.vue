@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, type RouteRecordName } from 'vue-router'
 
 import { useAuthStore } from '@/features/auth/stores'
 
@@ -14,10 +14,28 @@ import NavBreadcrumb from '@/shared/components/NavBreadcrumb.vue'
 const authStore = useAuthStore()
 const route = useRoute()
 
-// Computed para verificar si la página está en el array de soluciones
-const getSolutionId = computed(() => {
-  const solutionCode = route.name // O usa route.path dependiendo de tu ruta
-  return authStore.soluciones.find((sol) => sol.codigo === solutionCode)?.id
+const SEP = '::' as const
+
+// type guard for route names
+const isStrName = (n: RouteRecordName | null | undefined): n is string =>
+  typeof n === 'string' && n.length > 0
+
+// extract solutionId from "SOLUTION::page"
+const extractSolutionId = (fullName: string): string => {
+  const i = fullName.indexOf(SEP)
+  return i === -1 ? fullName : fullName.slice(0, i)
+}
+
+const getSolutionId = computed<number | undefined>(() => {
+  if (!isStrName(route.name)) return undefined
+
+  const fullCode = route.name
+
+  const solCode = extractSolutionId(fullCode)
+  const bySolution = authStore.soluciones.find((s) => s.codigo === solCode)
+  if (bySolution) return bySolution.id
+
+  return undefined
 })
 </script>
 
