@@ -1,47 +1,42 @@
 import { h, reactive } from 'vue'
 import type { Column, ColumnDef, Row, Table, TableMeta } from '@tanstack/vue-table'
 import type { WithId } from '@/shared/types/with-id'
-import type { GastoEventoInferido } from './gasto_evento' // Ajusta la ruta a tu interfaz
+import type { GastoEventoInferido } from './gasto_evento'
 
 import DataTableColumnHeader from '@/shared/components/table/DataTableColumnHeader.vue'
 import ComboboxSelect, { type SelectOption } from '@/shared/components/ComboboxSelect.vue'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { MoveRight, Loader2 } from 'lucide-vue-next'
 
-// 🔗 Catálogos
 import { useEmpresasCatalog, useCampanyaCatalog, useConceptoCatalog } from './catalogs'
 
-// --- Empresas: para mostrar nombre amigable ---
 const {
   loaded: empLoaded,
   loading: empLoading,
   ensureLoaded: ensureEmpresasLoaded,
-  options: empresaOptions, // para filtros
-  byCodigo: empresaByCodigo, // Map<string, Empresa>
+  options: empresaOptions,
+  byCodigo: empresaByCodigo,
 } = useEmpresasCatalog()
 
-// --- Campañas: editable ---
 const {
   loaded: campLoaded,
   loading: campLoading,
   ensureLoaded: ensureCampLoaded,
-  options: campOptions, // [{label, value:number}]
-  byCodigo: campByCodigo, // Map<number, Campanya>
+  options: campOptions,
+  byCodigo: campByCodigo,
 } = useCampanyaCatalog()
 
-// --- Conceptos: editable ---
 const {
   loaded: concLoaded,
   loading: concLoading,
   ensureLoaded: ensureConcLoaded,
-  options: concOptions, // [{label, value:number}]
-  byId: concById, // Map<number, Concepto>
+  options: concOptions,
+  byId: concById,
 } = useConceptoCatalog()
 
 type InferField = 'campanya' | 'concepto_gasto'
 type CheckboxState = boolean | 'indeterminate'
 
-// Saving state map (row+field -> isSaving)
 const savingMap = reactive(new Map<string, boolean>())
 
 function savingKey(row: Row<GastoEventoInferido>, field: InferField): string {
@@ -54,7 +49,6 @@ function setSaving(row: Row<GastoEventoInferido>, field: InferField, v: boolean)
   savingMap.set(savingKey(row, field), !!v)
 }
 
-// ---------------- Ephemeral check state per row+field ----------
 const inferApply = reactive(new Map<string, boolean>())
 
 function inferKey(row: Row<GastoEventoInferido>, field: InferField): string {
@@ -67,7 +61,6 @@ function setMarked(row: Row<GastoEventoInferido>, field: InferField, value: bool
   inferApply.set(inferKey(row, field), !!value)
 }
 
-// --------------------- Friendly label helpers -----------------
 function friendlyCampanya(value: number | null | undefined): string {
   return (
     (value != null ? campByCodigo.value.get(value)?.campanya.titulo : undefined) ??
@@ -81,14 +74,12 @@ function friendlyConcepto(value: number | null | undefined): string {
   )
 }
 
-// -------------------- Inferred getter by field ----------------
 function getInferred(row: Row<GastoEventoInferido>, field: InferField): number | null {
   return field === 'campanya'
     ? (row.original.campanya_inferido ?? null)
     : (row.original.concepto_gasto_inferido ?? null)
 }
 
-// --------------- Compute header checkbox tri-state ------------
 function headerState(
   rows: ReadonlyArray<Row<GastoEventoInferido>>,
   field: InferField,
@@ -100,7 +91,6 @@ function headerState(
   return 'indeterminate'
 }
 
-// --------------- Shared header/cell renderers (typed) ---------
 function specialHeader(opts: {
   table: Table<GastoEventoInferido>
   field: InferField
@@ -125,7 +115,6 @@ function specialHeader(opts: {
     const targets = rows.filter((r) => isMarked(r, field) && !isSaving(r, field))
     if (targets.length === 0) return
 
-    // Optimistic draft + per-row saving
     const ops = targets.map((r) => {
       const next = applyFromRow(r)
       meta.setRowField?.(r.index, field, next, r.original)
@@ -220,7 +209,7 @@ function specialCell(opts: {
         disabled: disabledUI,
         loading: isLoading || isSaving(row, field),
         clearable: true,
-        // When value changes, persist
+
         'onUpdate:modelValue': (next?) => {
           const nextNum = next == null ? null : Number(next)
           table.options.meta?.setRowField?.(row.index, field, nextNum, row.original)
@@ -273,7 +262,6 @@ function formatMoneyEs(n: number | string | null | undefined): string {
 }
 
 export const columns: Array<ColumnDef<GastoEventoInferido>> = [
-  // === SELECT CHECKBOX ===
   {
     id: 'select',
     header: ({ table }) =>
@@ -302,10 +290,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     maxSize: 56,
     meta: { fixedFirst: true },
   },
-
-  /* =================== LECTURA (readonly) =================== */
-
-  // EMPRESA (readonly, label desde catálogo)
   {
     accessorKey: 'empresa',
     header: ({ column }) => {
@@ -329,14 +313,11 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
         param: 'empresas',
         options: async () => {
           if (!empLoaded.value) await ensureEmpresasLoaded()
-          // empresaOptions ya trae {label, value:string} en la mayoría de implementaciones
           return empresaOptions.value
         },
       },
     },
   },
-
-  // FECHA IMPORTE (readonly)
   {
     accessorKey: 'fecha_importe',
     header: ({ column }) =>
@@ -349,8 +330,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 150,
     meta: { editable: false },
   },
-
-  // FECHA (readonly)
   {
     accessorKey: 'fecha',
     header: ({ column }) =>
@@ -363,8 +342,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
       filter: { type: 'dateRange', serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' } },
     },
   },
-
-  // CUENTA (readonly)
   {
     accessorKey: 'cuenta',
     header: ({ column }) =>
@@ -374,8 +351,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 140,
     meta: { editable: false },
   },
-
-  // CECO (readonly)
   {
     accessorKey: 'ceco',
     header: ({ column }) =>
@@ -385,8 +360,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 140,
     meta: { editable: false },
   },
-
-  // DESCRIPCION (readonly)
   {
     accessorKey: 'descripcion',
     header: ({ column }) =>
@@ -399,8 +372,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 280,
     meta: { editable: false },
   },
-
-  // ASIENTO (readonly)
   {
     accessorKey: 'asiento',
     header: ({ column }) =>
@@ -410,8 +381,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 140,
     meta: { editable: false },
   },
-
-  // DOCUMENTO (readonly)
   {
     accessorKey: 'documento',
     header: ({ column }) =>
@@ -421,8 +390,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 160,
     meta: { editable: false },
   },
-
-  // TEXTO ASIENTO (readonly)
   {
     accessorKey: 'texto_asiento',
     header: ({ column }) =>
@@ -435,8 +402,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 280,
     meta: { editable: false, filter: { type: 'text', param: 'texto_asiento' } },
   },
-
-  // IMPORTE (readonly)
   {
     accessorKey: 'importe',
     header: ({ column }) =>
@@ -451,10 +416,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 140,
     meta: { editable: false },
   },
-
-  /* =================== EDITABLES =================== */
-
-  // CAMPANYA (editable, select desde catálogo)
   {
     accessorKey: 'campanya',
     header: ({ table }) =>
@@ -467,7 +428,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
         },
         applyFromRow: (row) => {
           const infer = getInferred(row, 'campanya')
-          // devolvemos el valor a aplicar
           return infer
         },
       }),
@@ -491,8 +451,6 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     enableHiding: false,
     meta: { editable: true },
   },
-
-  // CONCEPTO_GASTO (especial)
   {
     accessorKey: 'concepto_gasto',
     header: ({ table }) =>

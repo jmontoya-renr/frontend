@@ -7,7 +7,6 @@ import { useAuthStore } from '@/features/auth/stores'
 import { useSolutionBus } from '@/shared/composables/useSolutionBus'
 import { CalendarDate, today, getLocalTimeZone, type DateValue } from '@internationalized/date'
 
-// ➜ Usamos tu nuevo composable
 import { useCursorCrud } from '@/shared/composables/table/useCursorCrud'
 
 import { convertToCSV, downloadCSV } from '@/shared/utils/csv-helpers'
@@ -25,28 +24,18 @@ const { ensureLoaded: ensureEmpresas, options, editableOptions } = useEmpresasCa
 
 const dataTable = useTemplateRef('data-table')
 
-// Time zone (usa la local; si quieres fijo: 'Europe/Madrid')
 const tz = getLocalTimeZone()
-
-// Today as DateValue
 const todayDv: DateValue = today(tz)
-
-// First day of this month
 const firstDayOfThisMonth: DateValue = new CalendarDate(todayDv.year, todayDv.month, 1)
-
-// (Opcional) Si tu hijo espera strings YYYY-MM-DD:
-const todayStr = todayDv.toString()
-const firstDayStr = firstDayOfThisMonth.toString()
 
 function buildInitialFilters(): Record<string, string[]> {
   return {
-    fecha_inicio: [firstDayStr],
-    fecha_fin: [todayStr],
+    fecha_inicio: [firstDayOfThisMonth.toString()],
+    fecha_fin: [todayDv.toString()],
     empresas: options.value.map((e) => e.value),
   }
 }
 
-// ======= CRUD con cursor (el composable maneja las filas) =======
 const {
   items,
   loading,
@@ -57,7 +46,8 @@ const {
   setFilters,
   setSort,
   clearSort,
-  update: updateItem, // update en servidor (el composable sincroniza su items)
+  update: updateItem,
+  remove: removeItem,
 } = useCursorCrud<Difusion, string | number, Partial<Difusion>, Partial<Difusion>>({
   baseUrl: 'http://localhost:9000/zms_difusion',
   idKey: 'id',
@@ -67,7 +57,6 @@ const {
 })
 
 const initialFilters = ref<Record<string, string[]>>({})
-// Handlers para pasar cambios al composable
 async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } | null) {
   booting.value = false
   if (p) {
@@ -75,17 +64,14 @@ async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } |
   } else {
     clearSort()
   }
-  await fetch() // reinicia (append desde cero en tu versión)
+  await fetch()
 }
 
 type ServerFilters = Record<string, string[]>
 
-/** Si una clave no viene en `incoming`, usa el valor por defecto de `initialFilters` */
 function mergeWithDefaults(incoming: ServerFilters): ServerFilters {
   const base = initialFilters.value
-  // empezamos con los defaults calculados
   const merged: ServerFilters = { ...base }
-  // sobrescribimos con lo que llegue (aunque venga vacío)
   for (const [k, v] of Object.entries(incoming)) {
     merged[k] = v
   }
@@ -95,18 +81,12 @@ function mergeWithDefaults(incoming: ServerFilters): ServerFilters {
 async function onServerFilters(f: ServerFilters) {
   booting.value = false
 
-  // Rellenamos con defaults las claves ausentes
   const merged = mergeWithDefaults(f)
 
-  // (Opcional) si quieres que la UI del DataTable/Toolbar muestre estos defaults
-  // cuando el usuario “limpia” un filtro, descomenta esta línea:
-  // initialFilters.value = merged
-
-  setFilters(merged) // limpia items + reset cursor en tu composable
-  await fetch() // primera página
+  setFilters(merged)
+  await fetch()
 }
 
-// ======= Adaptadores para DataTable (sin duplicar filas) =======
 const isPaging = ref(false)
 const booting = ref(true)
 const status = computed<'pending' | 'success' | 'error'>(() => {
@@ -123,13 +103,12 @@ async function loadMore(): Promise<void> {
   if (!hasNextPage.value) return
   isPaging.value = true
   try {
-    await nextPage() // el composable añade/gestiona sus items
+    await nextPage()
   } finally {
     isPaging.value = false
   }
 }
 
-// ======= Bus de solución y utilidades =======
 const getSolutionId = computed(() => {
   const solutionCode = route.name
   return authStore.soluciones.find((sol) => sol.codigo === solutionCode)?.id ?? null
@@ -145,7 +124,7 @@ function getFormattedFilename(title: string): string {
 }
 
 function exportLocal() {
-  const recordsToExport = items.value // usamos directamente las filas del composable
+  const recordsToExport = items.value
   if (recordsToExport.length > 0) {
     const csvContent = convertToCSV(recordsToExport)
     const name = t('titles.zms.paginacion')
@@ -176,8 +155,7 @@ onBeforeUnmount(() => {
   if (typeof off === 'function') off()
 })
 
-// ======= Edición de filas =======
-function isRowEditable(row: Difusion, rowIndex: number) {
+function isRowEditable(row: Difusion) {
   return editableOptions.value.map((e) => e.value).includes(row.empresa)
 }
 
@@ -190,14 +168,27 @@ type RowCommitPayload = {
 
 async function onRowCommit({ rowId, patch, onSuccess, onError }: RowCommitPayload) {
   try {
-    await updateItem(rowId, patch) // el composable actualiza su `items` internamente
+    await updateItem(rowId, patch)
     onSuccess()
   } catch (e) {
     onError(e)
   }
 }
 
-// ======= Montaje =======
+type RowDeletePayload = {
+  rowId: string | number
+  onSuccess: () => void
+  onError: (err?: unknown) => void
+}
+async function onRowDelete({ rowId, onSuccess, onError }: RowDeletePayload) {
+  try {
+    await removeItem(rowId)
+    onSuccess()
+  } catch (e) {
+    onError(e)
+  }
+}
+
 onMounted(async () => {
   await ensureEmpresas()
   initialFilters.value = buildInitialFilters()
@@ -226,6 +217,7 @@ onMounted(async () => {
         :load-more="loadMore"
         :initial-server-filters="initialFilters"
         @row-commit="onRowCommit"
+        @row-delete="onRowDelete"
         @server-sort="onServerSort"
         @server-filters="onServerFilters"
       />

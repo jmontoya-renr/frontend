@@ -17,7 +17,6 @@ export type SelectOption = Readonly<{
   label: string
   value: string
   disabled?: boolean
-  /** Optional: precomputed lower label for cheap filtering */
   labelLower?: string
 }>
 
@@ -36,10 +35,10 @@ const props = withDefaults(
     clearable?: boolean
     contentClass?: string
     buttonClass?: string
-    /** Virtual list height in px */
     listHeight?: number
-    /** Estimated row height in px */
     rowHeight?: number
+    /** Turn off the search input and filtering */
+    searchEnabled?: boolean
   }>(),
   {
     multiple: false,
@@ -53,6 +52,7 @@ const props = withDefaults(
     buttonClass: 'w-full h-8 px-2 justify-between',
     listHeight: 280,
     rowHeight: 45,
+    searchEnabled: true, // <-- default: search on
   },
 )
 
@@ -62,9 +62,8 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
-const query = ref('') // local search text
+const query = ref('')
 
-/** Normalize selection to array */
 const selectedValues = computed<string[]>(() => {
   if (Array.isArray(props.modelValue)) return props.modelValue
   return props.modelValue ? [props.modelValue] : []
@@ -73,7 +72,6 @@ const selectedSet = computed<Set<string>>(() => new Set(selectedValues.value))
 const selectedOptions = computed(() => props.options.filter((o) => selectedSet.value.has(o.value)))
 const isSelected = (v: string) => selectedSet.value.has(v)
 
-/** Emit helpers */
 function commit(value: ModelValue) {
   emit('update:modelValue', value)
   emit('change', value)
@@ -92,14 +90,14 @@ function clearSelection() {
   if (!props.multiple) open.value = false
 }
 
-/** Fast filtering (uses precomputed labelLower if present) */
+/** When search is disabled, return all options (ignore query) */
 const filtered = computed<ReadonlyArray<SelectOption>>(() => {
+  if (!props.searchEnabled) return props.options
   const q = query.value.trim().toLowerCase()
   if (!q) return props.options
   return props.options.filter((o) => (o.labelLower ?? o.label.toLowerCase()).includes(q))
 })
 
-/** Virtualization setup */
 const scrollParent = ref<HTMLElement | null>(null)
 const includeClear = computed(() => props.clearable)
 const virtualCount = computed(() => filtered.value.length + (includeClear.value ? 1 : 0))
@@ -108,15 +106,14 @@ const rowVirtualizer = useVirtualizer(
   computed(() => ({
     count: virtualCount.value,
     getScrollElement: () => scrollParent.value,
-    estimateSize: () => props.rowHeight, // keep it simple; tune if needed
-    overscan: 8,
+    estimateSize: () => props.rowHeight,
+    overscan: 5,
   })),
 )
 
 const virtualItems = computed(() => rowVirtualizer.value.getVirtualItems())
 const totalSize = computed(() => rowVirtualizer.value.getTotalSize())
 
-/** Map virtual index -> item (clear or option) */
 function itemAt(index: number): { kind: 'clear' } | { kind: 'option'; opt: SelectOption } {
   if (includeClear.value) {
     if (index === 0) return { kind: 'clear' }
@@ -164,8 +161,8 @@ const buttonLabel = computed(() => {
       data-keep-edit-open="true"
     >
       <Command data-keep-edit-open="true">
-        <!-- Bind query to our local filter; fallback @input if your CommandInput lacks v-model -->
         <CommandInput
+          v-if="searchEnabled"
           v-model="query"
           :placeholder="searchPlaceholder"
           data-keep-edit-open
@@ -174,7 +171,6 @@ const buttonLabel = computed(() => {
         />
         <CommandEmpty>{{ loading ? 'Cargando…' : emptyText }}</CommandEmpty>
 
-        <!-- Scroll container for virtualization -->
         <CommandList data-keep-edit-open="true">
           <CommandGroup>
             <div
@@ -189,7 +185,6 @@ const buttonLabel = computed(() => {
                   class="absolute left-0 top-0 w-full"
                   :style="{ transform: `translateY(${vi.start}px)`, height: `${vi.size}px` }"
                 >
-                  <!-- Render either 'clear' or actual option -->
                   <CommandItem
                     v-if="itemAt(vi.index).kind === 'clear'"
                     value="__clear__"

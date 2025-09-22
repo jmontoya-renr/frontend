@@ -1,5 +1,4 @@
 <script setup lang="ts" generic="T extends WithId">
-/* ========= SECCIÓN 1: Tipos/props ========= */
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -48,7 +47,7 @@ interface DataTableProps<T> {
   disableNewRows?: boolean
   initialServerFilters?: Record<string, string[]>
   loadMore?: () => void | Promise<void>
-  isRowEditable?: (row: T, rowIndex: number) => boolean
+  isRowEditable?: (row: T) => boolean
 }
 
 const props = defineProps<DataTableProps<T>>()
@@ -67,11 +66,20 @@ const emit = defineEmits<{
       onError: (err?: unknown) => void
     },
   ): void
+  (
+    e: 'row-delete',
+    payload: {
+      rowIndex: number
+      rowId: string | number
+      full: T
+      onSuccess: () => void
+      onError: (err?: unknown) => void
+    },
+  ): void
   (e: 'server-sort', payload: { sort_by: string; sort_order: 'asc' | 'desc' } | null): void
   (e: 'server-filters', payload: Record<string, Array<string>>): void
 }>()
 
-/** ===== Tipos & helpers para filtros iniciales (server -> TanStack) ===== */
 type RowCommitReason = 'row-change' | 'edit-exit' | 'unmount'
 
 type FilterMeta =
@@ -81,7 +89,6 @@ type FilterMeta =
 
 type DateRangeValue = { from?: string; to?: string }
 
-/** Obtiene el id “declarado” de un ColumnDef (id o accessorKey) */
 function getColumnId<T>(c: ColumnDef<T, unknown>): string | null {
   const byId = (c as { id?: string }).id
   if (byId) return byId
@@ -89,7 +96,6 @@ function getColumnId<T>(c: ColumnDef<T, unknown>): string | null {
   return byAccessor ?? null
 }
 
-/** Aplana columnas (por si hay columnas agrupadas) */
 function flattenColumns<T>(cols: Array<ColumnDef<T, unknown>>): Array<ColumnDef<T, unknown>> {
   const out: Array<ColumnDef<T, unknown>> = []
   const walk = (arr: Array<ColumnDef<T, unknown>>): void => {
@@ -103,7 +109,6 @@ function flattenColumns<T>(cols: Array<ColumnDef<T, unknown>>): Array<ColumnDef<
   return out
 }
 
-/** Traduce Record<string, string[]> del servidor a ColumnFiltersState de TanStack */
 function fromServerToColumnFilters<T>(
   cols: Array<ColumnDef<T, unknown>>,
   server: Record<string, string[]>,
@@ -117,7 +122,6 @@ function fromServerToColumnFilters<T>(
 
     const meta = c.meta?.filter as FilterMeta | undefined
 
-    // Sin meta -> fallback: usa la clave tal cual
     if (!meta) {
       const arr = server[id]
       if (Array.isArray(arr) && arr.length) res.push({ id, value: arr })
@@ -157,7 +161,6 @@ function fromServerToColumnFilters<T>(
   return res
 }
 
-/* ========= SECCIÓN 2: Estado ========= */
 const sorting = ref<SortingState>([])
 const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
@@ -169,13 +172,10 @@ const columnOrder = ref<Array<string>>([])
 const columnSizing = ref<Record<string, number>>({})
 
 const containerRef = ref<HTMLElement | null>(null)
-/* Navegación */
 const activeRowIndex = ref(-1)
 const activeColIndex = ref(-1)
-/* Edición */
 const isEditing = ref(false)
 
-/* Refs DOM */
 const rowEls = ref<Record<string, HTMLTableRowElement | null>>({})
 const cellEls = ref<Record<string, HTMLTableCellElement | null>>({})
 const setRowRef = (id: string, el: HTMLTableRowElement | null) => (rowEls.value[id] = el)
@@ -183,15 +183,11 @@ const setCellRef = (id: string, el: HTMLTableCellElement | null) => (cellEls.val
 
 const SKELETON_ROWS = 10
 const leafColumns = computed(() => table.getAllLeafColumns())
-// Considera loader cualquier índice >= rowCount aunque hasNextPage sea false.
-// Así, en transiciones (p.ej. filas → []), nunca accederemos a rows[vr.index].
+
 const isLoaderIndex = (i: number): boolean => i >= rowCount.value
 
-/** Eddited data */
-// Helpers
 const rowDrafts = ref<Record<string, Partial<T>>>({})
 
-// Obtener el id de la fila actual
 const rowIdAt = (i: number): string => rows.value[i]?.id ?? ''
 
 function rowIndexOf(original: T): number {
@@ -199,22 +195,19 @@ function rowIndexOf(original: T): number {
   return rows.value.findIndex((r) => r.id === id)
 }
 
-// Obtener el valor de una celda editada, si existe
 function getCellValue<K extends keyof T>(i: number, colId: K, originalRow: T): T[K] {
   const id = rowIdAt(i)
-  if (!id) return originalRow[colId] // Si no existe el id, retornamos el valor original
+  if (!id) return originalRow[colId]
   const draft = rowDrafts.value[id]
   return draft && colId in draft ? (draft[colId] as T[K]) : originalRow[colId]
 }
 
-// Actualizar el valor de la fila y marcarla como "editada"
 function setRowField<K extends keyof T>(i: number, colId: K, next: T[K], originalRow: T): void {
   const id = rowIdAt(i)
   if (!id) return
 
   const orig = originalRow[colId]
 
-  // 1) Si había error en esta celda, límpialo al tocar el campo
   const errs = rowErrors.value[id]
   if (errs && Object.prototype.hasOwnProperty.call(errs, colId)) {
     const nextErrs: Partial<Record<keyof T, unknown>> = { ...errs }
@@ -228,7 +221,6 @@ function setRowField<K extends keyof T>(i: number, colId: K, next: T[K], origina
     }
   }
 
-  // 2) Actualiza el draft de forma reactiva
   if (next === orig) {
     const draft = rowDrafts.value[id]
     if (!draft) return
@@ -249,11 +241,33 @@ function setRowField<K extends keyof T>(i: number, colId: K, next: T[K], origina
   }
 }
 
-// Verificar si una celda es "dirty" (modificada)
 function isCellDirtyById(i: number, colId: keyof T): boolean {
   const id = rowIdAt(i)
   const draft = rowDrafts.value[id]
   return !!(draft && colId in draft)
+}
+
+function ensureCursorOnEditableRow(): void {
+  const R = rows.value.length
+  const C = colCount.value
+  // Si no hay tabla visible, salimos de edición sin más
+  if (R === 0 || C === 0) {
+    if (isEditing.value) isEditing.value = false
+    return
+  }
+
+  // Aseguramos que los índices están dentro de rango
+  const ri = clamp(activeRowIndex.value < 0 ? 0 : activeRowIndex.value, 0, R - 1)
+  const ci = clamp(activeColIndex.value < 0 ? 0 : activeColIndex.value, 0, C - 1)
+  activeRowIndex.value = ri
+  activeColIndex.value = ci
+
+  // Si estamos en edición pero la fila actual no es editable -> salimos a movimiento
+  if (isEditing.value && !isRowEditableAt(ri)) {
+    isEditing.value = false
+    // Mantén el foco visual en la celda (modo movimiento)
+    nextTick(() => focusCellByIndex(ri, ci, { select: false }))
+  }
 }
 
 const rowPending = ref<Record<string, boolean>>({})
@@ -277,8 +291,6 @@ function isRowErrorAt(i: number): boolean {
   const e = rowErrors.value[id]
   return !!(e && Object.keys(e).length)
 }
-
-/* ========= SECCIÓN 3: Tabla (TanStack) ========= */
 
 const table = useVueTable({
   get data() {
@@ -327,6 +339,7 @@ const table = useVueTable({
     setRowField,
     getCellValue,
     isCellDirtyById,
+    isRowEditable: props.isRowEditable,
     isCellEditing: (rowIndex: number, colIndex: number) =>
       isEditing.value && activeRowIndex.value === rowIndex && activeColIndex.value === colIndex,
     commitRowAt: (rowIndex: number, reason: RowCommitReason = 'row-change'): boolean => {
@@ -339,6 +352,12 @@ const table = useVueTable({
       const idx = rowIndexOf(original)
       if (idx < 0) return Promise.resolve()
       return commitRowPromise(idx, reason)
+    },
+    deleteRowAt: (rowIndex: number): boolean => deleteRow(rowIndex),
+    deleteRowAtAsync: (rowIndex: number): Promise<void> => deleteRowPromise(rowIndex),
+    deleteOriginalAsync: (original: T): Promise<void> => {
+      const i = rowIndexOf(original)
+      return i >= 0 ? deleteRowPromise(i) : Promise.resolve()
     },
   },
 })
@@ -385,7 +404,6 @@ function savePrefsDebounced() {
   }, 250)
 }
 
-// merge helpers por si cambian columnas
 const currentIds = () => table.getAllLeafColumns().map((c) => c.id)
 function mergeOrder(saved: string[] | undefined): string[] {
   const ids = currentIds()
@@ -401,26 +419,22 @@ function filterSizing(saved: Record<string, number> | undefined) {
   return Object.fromEntries(Object.entries(saved).filter(([id]) => ids.has(id)))
 }
 
-// 5) ---- Restaurar al montar
 const suppressServerSync = ref(true)
 
 watch(
   () => props.initialServerFilters,
   (nf) => {
-    // 1) bloquea emisiones mientras hidratamos
     suppressServerSync.value = true
 
-    // 2) aplica filtros iniciales
     const next = nf ? fromServerToColumnFilters(props.columns, nf) : []
     columnFilters.value = next
     initialColumnFiltersDefault.value = next
 
-    // 4) reabre emisiones después del siguiente tick
     nextTick(() => {
       suppressServerSync.value = false
     })
   },
-  { deep: true, immediate: true, flush: 'sync' }, // <- importante
+  { deep: true, immediate: true, flush: 'sync' },
 )
 
 onMounted(() => {
@@ -432,13 +446,11 @@ onMounted(() => {
   }
   nextTick(() => {
     suppressServerSync.value = false
-  }) // ✅ listo para emitir
+  })
 })
 
-// 6) ---- Guardar ante cambios (deep para sizing/visibility)
 watch([columnVisibility, columnOrder, columnSizing], savePrefsDebounced, { deep: true })
 
-// 7) ---- (opcional) Sincronizar entre pestañas
 let onStorage: ((e: StorageEvent) => void) | null = null
 
 if (typeof window !== 'undefined') {
@@ -453,7 +465,6 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', onStorage)
 }
 
-/* ========= SECCIÓN 4: Helpers ========= */
 const rows = computed(() => table.getRowModel().rows)
 const colCount = computed(() => visibleLeafColumns.value.length)
 const rowCount = computed(() => rows.value.length)
@@ -468,7 +479,6 @@ const canAskMore = computed(() => !!props.hasNextPage && !isLoadingAnything.valu
 function mapFiltersToServer(fs: ColumnFiltersState): Record<string, Array<string>> {
   const out: Record<string, Array<string>> = {}
 
-  // Build a quick lookup: columnId -> filter meta
   const metaById = new Map(
     table.getAllLeafColumns().map((c) => [c.id, c.columnDef.meta?.filter as unknown]),
   )
@@ -478,11 +488,11 @@ function mapFiltersToServer(fs: ColumnFiltersState): Record<string, Array<string
       | { type: 'text'; param?: string }
       | { type: 'multiSelect'; param: string }
       | { type: 'dateRange'; serverKeys?: { from?: string; to?: string } }
+      | { type: 'boolean'; param?: string }
       | undefined
 
     const raw = (f as { value: unknown }).value
     if (!meta) {
-      // Fallback: behave like before
       const v = Array.isArray(raw)
         ? raw.map(String).filter(Boolean)
         : raw == null
@@ -492,7 +502,6 @@ function mapFiltersToServer(fs: ColumnFiltersState): Record<string, Array<string
       continue
     }
 
-    // TEXT
     if (meta.type === 'text') {
       const key = meta.param || f.id
       const v = raw == null ? '' : String(raw).trim()
@@ -500,7 +509,6 @@ function mapFiltersToServer(fs: ColumnFiltersState): Record<string, Array<string
       continue
     }
 
-    // MULTI-SELECT
     if (meta.type === 'multiSelect') {
       const key = meta.param
       const arr = Array.isArray(raw)
@@ -512,15 +520,25 @@ function mapFiltersToServer(fs: ColumnFiltersState): Record<string, Array<string
       continue
     }
 
-    // DATE RANGE
     if (meta.type === 'dateRange') {
-      // Expect shape { from?: string, to?: string }
       const { from, to } = (raw ?? {}) as { from?: string; to?: string }
-      // Use configured server keys or sensible defaults
       const fromKey = meta.serverKeys?.from ?? `${f.id}_from`
       const toKey = meta.serverKeys?.to ?? `${f.id}_to`
       if (from) out[fromKey] = [from]
       if (to) out[toKey] = [to]
+      continue
+    }
+
+    if (meta.type === 'boolean') {
+      // Serialize boolean as 'true' | 'false' and use meta.param if provided
+      const key = meta.param || f.id
+      // Accept both boolean and string just in case
+      if (typeof raw === 'boolean') {
+        out[key] = [raw ? 'true' : 'false']
+      } else if (typeof raw === 'string') {
+        const v = raw.trim().toLowerCase()
+        if (v === 'true' || v === 'false') out[key] = [v]
+      }
       continue
     }
   }
@@ -539,7 +557,7 @@ function mapSortingToServer(
 const emitServerSort = useDebounceFn((s: SortingState) => {
   if (suppressServerSync.value) return
   emit('server-sort', mapSortingToServer(s))
-}, 250) // ajusta el delay a tu gusto
+}, 250)
 
 watch(
   () => sorting.value,
@@ -549,7 +567,7 @@ watch(
 const emitServerFilters = useDebounceFn((cf: ColumnFiltersState) => {
   if (suppressServerSync.value) return
   emit('server-filters', mapFiltersToServer(cf))
-}, 250)
+}, 1000)
 
 watch(
   () => columnFilters.value,
@@ -577,7 +595,7 @@ watch(
 function isRowEditableAt(i: number): boolean {
   const r = rows.value[i]
   if (!r) return false
-  const base = props.isRowEditable ? props.isRowEditable(r.original as T, i) : true
+  const base = props.isRowEditable ? props.isRowEditable(r.original as T) : true
   return base && !isRowPendingAt(i)
 }
 
@@ -607,10 +625,62 @@ function getRowPatch(i: number): Partial<T> | null {
   return patch && Object.keys(patch).length ? patch : null
 }
 
+function deleteRow(i: number): boolean {
+  const id = rowIdAt(i)
+  if (!id) return false
+  if (isRowPendingAt(i)) return false
+
+  const original = rows.value[i]?.original as T | undefined
+  if (!original) return false
+
+  rowPending.value[id] = true
+  delete rowErrors.value[id]
+
+  const onSuccess = (): void => {
+    delete rowPending.value[id]
+    delete rowDrafts.value[id]
+    delete rowErrors.value[id]
+    nextTick(() => ensureCursorOnEditableRow())
+  }
+
+  const onError = (_err?: unknown): void => {
+    delete rowPending.value[id]
+    nextTick(() => ensureCursorOnEditableRow())
+  }
+
+  emit('row-delete', { rowIndex: i, rowId: original.id, full: original, onSuccess, onError })
+  return true
+}
+
+function deleteRowPromise(i: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const ok = deleteRow(i)
+    if (!ok) return resolve()
+
+    const id = rowIdAt(i)
+    queueMicrotask(() => {
+      if (!rowPending.value[id]) {
+        resolve()
+        return
+      }
+      const stop = watch(
+        () => rowPending.value[id],
+        (pending) => {
+          if (!pending) {
+            stop()
+            resolve()
+          }
+        },
+        { flush: 'post' },
+      )
+    })
+  })
+}
+
 function commitRow(i: number, reason: RowCommitReason): boolean {
   const id = rowIdAt(i)
   if (!id) return false
-  if (rowPending.value[id]) return false // evita commits duplicados
+  if (rowPending.value[id]) return false
 
   const patch = getRowPatch(i)
   if (!patch) return false
@@ -619,14 +689,13 @@ function commitRow(i: number, reason: RowCommitReason): boolean {
   if (!original) return false
   const full = { ...original, ...patch } as T
 
-  // marcar pendiente y mantener draft => sigue viéndose "dirty"
   rowPending.value[id] = true
   delete rowErrors.value[id]
 
   const onSuccess = () => {
     delete rowPending.value[id]
     delete rowDrafts.value[id]
-    delete rowErrors.value[id] // o limpiar solo los campos del patch si prefieres
+    delete rowErrors.value[id]
   }
 
   const onError = (err?: unknown) => {
@@ -655,16 +724,14 @@ function commitRowPromise(i: number, reason: RowCommitReason): Promise<void> {
 
     const id = rowIdAt(i)
 
-    // First, give the same-tick chance to clear
     queueMicrotask(() => {
       if (!rowPending.value[id]) {
         resolve()
         return
       }
 
-      // Then, watch the specific key and resolve when it becomes falsy
       const stop = watch(
-        () => rowPending.value[id], // tracks add/remove and true->false
+        () => rowPending.value[id],
         (pending) => {
           if (!pending) {
             stop()
@@ -677,7 +744,6 @@ function commitRowPromise(i: number, reason: RowCommitReason): Promise<void> {
   })
 }
 
-// (opcional) por si quieres descartar cambios de la fila activa al cancelar:
 function discardRow(i: number) {
   const id = rowIdAt(i)
   if (!id) return
@@ -685,7 +751,6 @@ function discardRow(i: number) {
   delete rowErrors.value[id]
 }
 
-/* ========= SECCIÓN 5: Virtual Scroll (TanStack Virtual) ========= */
 const rowVirtualizer = useVirtualizer(
   computed(() => ({
     count: props.hasNextPage ? rowCount.value + SKELETON_ROWS : rowCount.value,
@@ -711,7 +776,6 @@ const triggerLoadMore = useThrottleFn(
   true,
 )
 
-/* Pide la siguiente página cuando el último virtual esté en el final */
 watchEffect(() => {
   if (!canAskMore.value) return
 
@@ -726,15 +790,12 @@ watchEffect(() => {
   }
 })
 
-/* ========= SECCIÓN 6: Foco por celda ========= */
-// NEW: treat interactive elements as "do not alter row selection"
 function isInteractiveElement(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
   if (!el) return false
   return !!el.closest('input,button,select,textarea,label,a,[role="checkbox"],[data-no-row-select]')
 }
 
-// Allow additive selection (keep previous) when desired
 function focusCellByIndex(
   r: number,
   c: number,
@@ -751,7 +812,6 @@ function focusCellByIndex(
   const row = rows.value[ri]
   const cell = row.getVisibleCells()[ci]
 
-  // Only modify selection if requested; optionally additive
   if (opts.select) {
     rowSelection.value = opts.additive
       ? { ...rowSelection.value, [row.id]: true }
@@ -768,8 +828,6 @@ function focusCellByIndex(
     })
   })
 }
-
-/* ========= SECCIÓN 7: Modo edición ========= */
 
 function isEditableTarget(el: EventTarget | null) {
   const t = el as HTMLElement | null
@@ -793,12 +851,10 @@ function onKeydownCapture(e: KeyboardEvent) {
   if (!arrowOrScrollKey) return
 
   if (isEditableTarget(e.target)) {
-    // Deja que el input maneje el caret, pero evita que burbujee al grid
     e.stopPropagation()
     return
   }
 
-  // Si el foco NO está en un campo editable: evita que el contenedor scrollee
   e.preventDefault()
   e.stopPropagation()
 }
@@ -821,7 +877,7 @@ function focusFirstEditableInCell(i: number, j: number) {
 function enterEditMode(i: number, j: number) {
   if (i < 0 || j < 0) return
   if (isEditing.value && i === activeRowIndex.value && j === activeColIndex.value) return
-  if (!isCellEditable(i, j)) return // Bloquear edición si la fila no es editable
+  if (!isCellEditable(i, j)) return
 
   if (activeRowIndex.value !== i || activeColIndex.value !== j) {
     focusCellByIndex(i, j, { select: true })
@@ -830,7 +886,7 @@ function enterEditMode(i: number, j: number) {
   isEditing.value = true
   emit('edit-start', { rowIndex: i, colIndex: j })
 
-  nextTick(() => focusFirstEditableInCell(i, j)) // Aseguramos que el input reciba el foco al entrar en modo edición
+  nextTick(() => focusFirstEditableInCell(i, j))
 }
 
 function endEdit(
@@ -879,7 +935,7 @@ function endEdit(
     nextTick(() => {
       focusCellByIndex(next.r, next.c, { select: false })
       emit('edit-start', { rowIndex: next.r, colIndex: next.c })
-      nextTick(() => focusFirstEditableInCell(next.r, next.c)) // Aseguramos que el input reciba el foco al cambiar de fila
+      nextTick(() => focusFirstEditableInCell(next.r, next.c))
     })
     return
   }
@@ -892,16 +948,13 @@ function endEdit(
   }
 }
 
-/* ========= SECCIÓN 8: Eventos de celda ========= */
 function onCellClick(i: number, j: number, e: MouseEvent) {
   if (isInteractiveElement(e.target)) {
-    // Keep focus for accessibility but don't alter rowSelection
     activeRowIndex.value = i
     activeColIndex.value = j
     return
   }
 
-  // Optional: support additive selection with Ctrl/Cmd
   const additive = e.ctrlKey || e.metaKey
   const isSameCell = i === activeRowIndex.value && j === activeColIndex.value
 
@@ -925,7 +978,6 @@ function onCellDblClick(i: number, j: number) {
   if (isCellEditable(i, j)) enterEditMode(i, j)
 }
 
-/* ========= SECCIÓN 9: Teclado (contenedor) ========= */
 function onKeydown(e: KeyboardEvent) {
   const R = rows.value.length,
     C = colCount.value
@@ -933,7 +985,6 @@ function onKeydown(e: KeyboardEvent) {
     c = activeColIndex.value
 
   if (isEditing.value) {
-    // --- EDICIÓN ---
     if (e.key === 'Escape') {
       e.preventDefault()
       endEdit(false)
@@ -944,9 +995,8 @@ function onKeydown(e: KeyboardEvent) {
       const atLast = !e.shiftKey && r === R - 1
       const atFirst = e.shiftKey && r === 0
       if (atLast || atFirst) {
-        // confirmar y dejar que Tab salga al siguiente/previo elemento
         endEdit(true, undefined, { refocus: false })
-        return // NO preventDefault
+        return
       }
       e.preventDefault()
       if (e.shiftKey) {
@@ -962,9 +1012,8 @@ function onKeydown(e: KeyboardEvent) {
       const atLast = !e.shiftKey && r === R - 1 && c === C - 1
       const atFirst = e.shiftKey && r === 0 && c === 0
       if (atLast || atFirst) {
-        // confirmar y dejar que Tab salga al siguiente/previo elemento
         endEdit(true, undefined, { refocus: false })
-        return // NO preventDefault
+        return
       }
       e.preventDefault()
       if (e.shiftKey) {
@@ -978,11 +1027,9 @@ function onKeydown(e: KeyboardEvent) {
       }
       return
     }
-    // otras teclas: dejar al input
     return
   }
 
-  // --- DESPLAZAMIENTO ---
   if (!R || !C) return
 
   switch (e.key) {
@@ -1073,7 +1120,6 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-/* ========= SECCIÓN 10: Sincronización ========= */
 watch(
   () => rows.value.length,
   (len) => {
@@ -1094,10 +1140,8 @@ watch(colCount, (cols) => {
   }
 })
 
-/* No mover foco al entrar al contenedor */
 function onContainerFocus(_e: FocusEvent) {}
 
-/* ========= SECCIÓN 11: Expose ========= */
 defineExpose({
   showViewOptionsDialog() {
     if (viewOptions.value) viewOptions.value.openDialog()
@@ -1376,27 +1420,21 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ========== 0) Base & tokens ========== */
 td[data-slot='table-cell'] {
   position: relative;
 }
 
 [data-slot='table-container'] {
   --movement-ring: var(--ring);
-  /* edición */
   --edit-ring: #10b98166;
   --edit-bg: color-mix(in srgb, #10b981 12%, transparent);
-  /* dirty */
   --dirty-ring: #f59e0b66;
   --dirty-bg: color-mix(in srgb, #f59e0b 10%, transparent);
-  /* error */
   --error-ring: #ef444466;
   --error-bg: color-mix(in srgb, #ef4444 12%, transparent);
-  /* readonly */
   --readonly-ring: #6b728066;
   --readonly-bg: color-mix(in srgb, #6b7280 10%, transparent);
   --readonly-text: color-mix(in srgb, currentColor 70%, #6b7280);
-  /* estados de fila */
   --pending-row-bg: color-mix(in srgb, #f59e0b 8%, transparent);
   --row-error-bg: color-mix(in srgb, #ef4444 10%, transparent);
   --pending-lock: #f59e0b;
@@ -1425,13 +1463,11 @@ td[data-slot='table-cell'] {
   opacity: 1;
 }
 
-/* ========== 1) Focus (siempre encima) ========== */
 td[data-focused='true'] {
   outline: 2px solid var(--movement-ring);
   outline-offset: -2px;
 }
 
-/* ========== 2) Readonly (baja prioridad) ========== */
 tr[data-readonly='true'] td:not([data-editing='true']):not([data-error='true']),
 td[data-readonly='true']:not([data-editing='true']):not([data-error='true']):not(
     [data-dirty='true']
@@ -1439,7 +1475,7 @@ td[data-readonly='true']:not([data-editing='true']):not([data-error='true']):not
   background: var(--readonly-bg);
   color: var(--readonly-text);
 }
-/* Candado readonly solo si no hay edición/dirty/error */
+
 td[data-readonly='true']:not([data-editing='true']):not([data-error='true']):not(
     [data-dirty='true']
   )::after {
@@ -1463,14 +1499,12 @@ td[data-readonly='true']:not([data-editing='true']):not([data-error='true']):not
   mask-position: center;
 }
 
-/* ========== 3) Edición (media prioridad) ========== */
 td[data-editing='true'] {
   outline: 2px solid var(--edit-ring);
   outline-offset: -2px;
   background: var(--edit-bg);
 }
 
-/* ========== 4) Dirty (solo si NO hay error y NO en fila pending/row-error) ========== */
 tr:not([data-pending='true']):not([data-row-error='true'])
   td[data-dirty='true']:not([data-editing='true']):not([data-error='true']) {
   background: var(--dirty-bg);
@@ -1501,7 +1535,6 @@ tr:not([data-pending='true']):not([data-row-error='true'])
   z-index: 1;
 }
 
-/* ========== 5) Error (ALTA prioridad; gana a dirty/readonly) ========== */
 td[data-error='true']:not([data-editing='true']) {
   background: var(--error-bg);
 }
@@ -1536,14 +1569,11 @@ td[data-error='true']::after {
   z-index: 2;
 }
 
-/* ========== 6) ESTADOS DE FILA (pending / row-error) ========== */
-/* Pending: tinte de fila; sin readonly; la celda dirty mantiene banda y muestra candado amarillo */
 tr[data-pending='true'] td {
   background: var(--pending-row-bg) !important;
   color: inherit;
 }
 
-/* Banda amarilla también en pending (en celdas dirty) */
 tr[data-pending='true'] td[data-dirty='true']::before {
   content: '';
   position: absolute;
@@ -1554,7 +1584,7 @@ tr[data-pending='true'] td[data-dirty='true']::before {
   border-radius: 2px;
   pointer-events: none;
 }
-/* Reemplaza el punto dirty por candado AMARILLO solo si la celda es dirty (y sin error/edición) */
+
 tr[data-pending='true'] td:not([data-editing='true']):not([data-error='true'])::after {
   content: '';
   position: absolute;
@@ -1576,7 +1606,6 @@ tr[data-pending='true'] td:not([data-editing='true']):not([data-error='true'])::
   mask-position: center;
 }
 
-/* Row error: fila rojo claro; la celda con error mantiene banda roja y ! */
 tr[data-row-error='true'] td {
   background: var(--row-error-bg) !important;
   color: inherit;

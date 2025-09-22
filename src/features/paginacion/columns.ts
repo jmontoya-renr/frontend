@@ -1,5 +1,5 @@
 import type { Column, ColumnDef } from '@tanstack/vue-table'
-import { h, nextTick, vShow, withDirectives } from 'vue'
+import { h, nextTick, vShow, withDirectives, type ComponentPublicInstance, type VNode } from 'vue'
 import type { Paginacion } from '@/features/paginacion/paginacion'
 import DataTableColumnHeader from '@/shared/components/table/DataTableColumnHeader.vue'
 
@@ -11,6 +11,7 @@ import { today, getLocalTimeZone, CalendarDate } from '@internationalized/date'
 import { useEmpresasCatalog, useProductosCatalog } from './catalogs'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import type { WithId } from '@/shared/types/with-id'
+import { Trash2 } from 'lucide-vue-next'
 
 const {
   loaded: empLoaded,
@@ -529,5 +530,87 @@ export const columns: Array<ColumnDef<Paginacion>> = [
     minSize: 120,
     size: 160,
     meta: { editable: true },
+  },
+  {
+    id: 'delete',
+    header: () => h('span', { class: 'sr-only' }, 'Eliminar'),
+
+    cell: ({ row, column, table }) => {
+      const perform = async () => {
+        void table.options.meta?.deleteRowAtAsync?.(row.index)
+      }
+
+      const onClick = (e: MouseEvent) => {
+        e.stopPropagation()
+        perform()
+      }
+
+      const onKeydown = (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          perform()
+        }
+      }
+
+      if (
+        table.options.meta &&
+        table.options.meta.isRowEditable &&
+        !table.options.meta.isRowEditable(row.original)
+      ) {
+        return
+      }
+
+      const isEditing =
+        table.options.meta &&
+        table.options.meta.isCellEditing &&
+        table.options.meta.isCellEditing(row.index, column.getIndex())
+
+      const focusDom = (el: Element | null): void => {
+        if (!el || !isEditing) return
+        requestAnimationFrame(() => {
+          try {
+            ;(el as HTMLButtonElement).focus({ preventScroll: true })
+          } catch {}
+        })
+      }
+
+      const setBtnRef = (el: Element | ComponentPublicInstance | null) => {
+        focusDom(el as Element | null)
+      }
+
+      const onMountedHook = (v: VNode) => focusDom(v.el as Element | null)
+      const onUpdatedHook = (v: VNode) => focusDom(v.el as Element | null)
+
+      return h(
+        'button',
+        {
+          type: 'button',
+          title: 'Eliminar fila',
+          'aria-label': 'Eliminar fila',
+          class:
+            'inline-flex items-center justify-center h-8 w-8 rounded-md ' +
+            'text-destructive hover:bg-destructive/10 ' +
+            'focus:outline-none focus:ring-2 focus:ring-destructive/40',
+          onClick,
+          onKeydown,
+          onMousedown: (e: MouseEvent) => e.stopPropagation(),
+          ref: setBtnRef,
+          onVnodeMounted: onMountedHook,
+          onVnodeUpdated: onUpdatedHook,
+          autofocus: isEditing,
+        },
+        [h(Trash2, { class: 'size-4' })],
+      )
+    },
+
+    enableSorting: false,
+    enableHiding: false,
+    enableResizing: false,
+    size: 56,
+    minSize: 56,
+    maxSize: 56,
+
+    meta: { fixedLast: true },
   },
 ]

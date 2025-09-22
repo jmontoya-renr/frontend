@@ -87,7 +87,6 @@ export const useAuthStore = defineStore('auth', () => {
       (l) => l.id_solucion === solId && l.id_sociedad === socId && l.activo,
     )
     if (!link) return null
-    // Ignora vínculos a soluciones inexistentes en payload.soluciones
     if (!solucionesById.value.get(solId)) return null
     return link
   }
@@ -173,7 +172,6 @@ export const useAuthStore = defineStore('auth', () => {
   function hasPermission(routeName: string) {
     const sol = solucionesByCode.value.get(routeName.toUpperCase())
     if (!sol) return false
-    // permiso si hay algún vínculo activo y la sociedad está activa
     return !!payload.value?.soluciones_sociedades.some((l) => {
       if (!l.activo || l.id_solucion !== sol.id) return false
       const soc = sociedadesById.value.get(l.id_sociedad)

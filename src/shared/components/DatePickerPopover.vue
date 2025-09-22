@@ -20,7 +20,6 @@ type Props = {
   minValue?: DateValue | null
   maxValue?: DateValue | null
   disabled?: boolean
-  /** Si true, el usuario no puede borrar la fecha desde el calendario */
   noClear?: boolean
   class?: HTMLAttributes['class']
   buttonClass?: HTMLAttributes['class']
@@ -40,7 +39,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: string | null): void }>()
 
-// --- Normalize external value to DateValue (accepts YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss or Date)
 function toDateValue(input: string | Date | null | undefined): DateValue | undefined {
   if (!input) return undefined
   if (input instanceof Date) {
@@ -59,7 +57,6 @@ function toDateValue(input: string | Date | null | undefined): DateValue | undef
 
 const dv = computed<DateValue | undefined>({
   get: () => toDateValue(props.modelValue),
-  // Nota: el “noClear” se aplica en el handler onPick (UI); aquí no bloqueamos cambios externos
   set: (val) => emit('update:modelValue', val ? val.toString() : null),
 })
 
@@ -80,9 +77,7 @@ const label = computed<string>(() =>
 
 const open = ref(false)
 
-// --- Prevent clear if noClear === true
 function onPick(val: DateValue | undefined) {
-  // If user tries to clear from UI and noClear is on, ignore it
   if (!val && props.noClear) return
   dv.value = val
   if (val) {
@@ -95,7 +90,6 @@ function onPick(val: DateValue | undefined) {
 <template>
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
-      <!-- mantener edición abierta dentro de la tabla -->
       <Button
         type="button"
         variant="outline"

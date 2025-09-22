@@ -29,12 +29,11 @@ const links = computed(() => auth.solucionesSociedades ?? [])
 
 const CAT_ALL = '__ALL__'
 const CAT_NONE = '__NONE__'
-// Filtros
+
 const q = ref('')
 const companyFilter = ref<typeof CAT_ALL | typeof CAT_NONE | number>(CAT_ALL)
 const roleFilter = ref<typeof CAT_ALL | typeof CAT_NONE | 'ADMIN' | 'RW' | 'R'>(CAT_ALL)
 
-// Helpers
 const norm = (s: string) =>
   s
     .toLowerCase()
@@ -50,7 +49,6 @@ const rolesOptions = [
   { value: CAT_NONE, label: t('roles.none') },
 ] as const
 
-// Join soluciones + sociedades
 const joined = computed(() => {
   const map = byId.value
   return solutions.value
@@ -89,7 +87,6 @@ const joined = computed(() => {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
 })
 
-// Opciones dinámicas de sociedad
 const companyOptions = computed(() => {
   const result = companies.value
     .slice()
@@ -103,15 +100,12 @@ const companyOptions = computed(() => {
   ]
 })
 
-// Filtrado final
 const filtered = computed(() => {
   const text = norm(q.value.trim())
   return joined.value.filter((sol) => {
-    // texto
     const okText = !text || sol._nNombre.includes(text) || sol._nCodigo.includes(text)
     if (!okText) return false
 
-    // sociedade
     const okCompany =
       companyFilter.value === CAT_ALL
         ? true
@@ -120,7 +114,6 @@ const filtered = computed(() => {
           : sol.sociedades.some((e) => e.id === companyFilter.value)
     if (!okCompany) return false
 
-    // rol
     const okRole =
       roleFilter.value === CAT_ALL
         ? true
@@ -131,7 +124,6 @@ const filtered = computed(() => {
   })
 })
 
-// Presentación de rol
 function roleBadgeClass(code?: string) {
   switch (code) {
     case 'ADMIN':

@@ -10,7 +10,7 @@ function toUTCDate(iso: string): Date {
 }
 
 export function formatUiDate(iso: string): string {
-  const ui = useUiStore() // Pinia
+  const ui = useUiStore()
 
   const locale = LOCALE_MAP[ui.lang as keyof typeof LOCALE_MAP]
   let d

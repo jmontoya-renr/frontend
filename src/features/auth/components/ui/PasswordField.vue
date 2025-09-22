@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { EyeOffIcon, EyeIcon } from 'lucide-vue-next'
 import { useField } from 'vee-validate'
 
-// UI components
 import Box from '@/features/auth/components/ui/Box.vue'
 import FormItem from '@/shared/components/ui/form/FormItem.vue'
 import FormLabel from '@/shared/components/ui/form/FormLabel.vue'
@@ -25,14 +24,12 @@ const props = withDefaults(defineProps<PasswordFieldProps>(), {
   placeholder: () => t('forms.enter-password'),
 })
 
-// estado de visibilidad
 const passwordVisible = ref(false)
 
 function resolvePlaceholder(placeholder: string | (() => string)): string {
   return typeof placeholder === 'function' ? placeholder() : placeholder
 }
 
-// integración con vee-validate
 const { value, errorMessage, handleChange } = useField<string>(props.name)
 </script>
 

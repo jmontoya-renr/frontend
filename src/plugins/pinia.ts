@@ -12,20 +12,13 @@ pinia.use(({ store }) => {
   watch(
     store.$state,
     (state) => {
-      /* Si se quieren excluir los tokens!!!
-      // Filtrar tokens del auth store
       const stateToSave = { ...state }
 
       if (store.$id === 'auth') {
-        // Elimina propiedades sensibles
         delete stateToSave.accessToken
-        delete stateToSave.refreshToken
       }
 
       localStorage.setItem(store.$id, JSON.stringify(stateToSave))
-      */
-
-      localStorage.setItem(store.$id, JSON.stringify({ ...state }))
     },
     { deep: true },
   )

@@ -1,4 +1,3 @@
-// composables/useMessagesLazy.ts
 import api from '@/plugins/axios'
 import { ref, type Ref, onScopeDispose } from 'vue'
 import type { AxiosInstance, AxiosError } from 'axios'
@@ -16,7 +15,6 @@ type Status = 'idle' | 'loading' | 'success' | 'error'
 const cache = new Map<number, Message[]>()
 const inflight = new Map<number, Promise<Message[]>>()
 
-// helper seguro sin `any`
 function schedule(fn: () => void): number {
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
     return (
@@ -72,7 +70,7 @@ export function useMessagesLazy(solutionId: number, instance: AxiosInstance = ap
           return data
         })
         .catch((e: AxiosError | unknown) => {
-          if (ac.signal.aborted) return [] // componente desmontado
+          if (ac.signal.aborted) return []
           error.value = e
           status.value = 'error'
           return []

@@ -18,7 +18,6 @@ import { useAuthStore } from '@/features/auth/stores'
 const router = useRouter()
 const auth = useAuthStore()
 
-// --- helpers for "SOLUTION::page" convention ---
 const SEP = '::' as const
 const isStrName = (n: RouteRecordName | null | undefined): n is string =>
   typeof n === 'string' && n.length > 0
@@ -32,37 +31,51 @@ const parseName = (n: RouteRecordName | null | undefined): ParsedName => {
     : { solutionId: n.slice(0, i), pageCode: n.slice(i + SEP.length) }
 }
 
-// Only show one card per solution: the child with path '' (i.e., pageCode === "index")
 const solutionIndexRoutes = computed<RouteRecordNormalized[]>(() => {
   const allowed = new Set<string>(auth.soluciones.map((s) => s.codigo))
 
-  // Stage 1: allowed by full route name OR by solutionId (prefix)
-  const candidates = router.getRoutes().filter((r) => {
-    if (!isStrName(r.name)) return false
+  const groups = new Map<string, RouteRecordNormalized[]>()
+
+  for (const r of router.getRoutes()) {
+    if (!isStrName(r.name)) continue
     const { solutionId } = parseName(r.name)
-    if (allowed.has(r.name)) return true
-    return !!solutionId && allowed.has(solutionId)
-  })
 
-  // Stage 2: keep only one per solution, preferring "::index"
-  const bySolution = new Map<string, RouteRecordNormalized>()
-  const singles: RouteRecordNormalized[] = []
+    const canSee = allowed.has(r.name) || (solutionId ? allowed.has(solutionId) : false)
+    if (!canSee) continue
 
-  for (const r of candidates) {
-    const { solutionId, pageCode } = parseName(r.name)
-    if (solutionId) {
-      const current = bySolution.get(solutionId)
-      // Prefer the index page; if none stored yet, take whatever we have
-      if (!current || pageCode === 'index') {
-        bySolution.set(solutionId, r)
-      }
-    } else {
-      // No solution marker -> keep as-is (optional: drop if you want only solutions)
-      singles.push(r)
+    const key = solutionId ?? String(r.name)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(r)
+  }
+
+  const selected: RouteRecordNormalized[] = []
+
+  for (const [key, items] of groups) {
+    const parent = items.find(
+      (rr) => isStrName(rr.name) && !parseName(rr.name).solutionId && String(rr.name) === key,
+    )
+    if (parent) {
+      selected.push(parent)
+      continue
+    }
+
+    const index = items.find((rr) => {
+      const p = parseName(rr.name)
+      return !!p.solutionId && p.solutionId === key && p.pageCode === 'index'
+    })
+    if (index) {
+      selected.push(index)
+      continue
+    }
+
+    const only = items.length === 1 ? items[0] : undefined
+    if (only && !parseName(only.name).solutionId) {
+      selected.push(only)
+      continue
     }
   }
 
-  return [...bySolution.values(), ...singles]
+  return selected
 })
 
 const CAT_ALL = '__ALL__'
@@ -71,7 +84,6 @@ const CAT_NONE = '__NONE__'
 const selectedCategory = ref<string>(CAT_ALL)
 const query = ref('')
 
-/** Normalize solution view models */
 type SolutionItem = {
   name: string
   displayName: string
@@ -90,15 +102,14 @@ const normalized = computed<SolutionItem[]>(() =>
         : null
 
     return {
-      name: String(r.name), // will be "SOLUTION::index" for solution cards
-      displayName: display, // nice label (usually solution title)
-      firstLetter: first, // badge
-      category, // used for grouping/filtering
+      name: String(r.name),
+      displayName: display,
+      firstLetter: first,
+      category,
     }
   }),
 )
 
-/** Category options (unique, sorted) */
 const categoryOptions = computed<Array<string>>(() => {
   const set = new Set<string>()
   for (const s of normalized.value) {
@@ -107,7 +118,6 @@ const categoryOptions = computed<Array<string>>(() => {
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
 
-/** Apply search + category filter */
 const filtered = computed<SolutionItem[]>(() => {
   const q = query.value.trim().toLowerCase()
   const cat = selectedCategory.value
@@ -123,11 +133,6 @@ const filtered = computed<SolutionItem[]>(() => {
   })
 })
 
-/** Group by category and sort:
- * - categories A→Z
- * - items A→Z
- * - uncategorized goes last and has no category border/legend
- */
 const groupedAndSorted = computed(() => {
   const groups = new Map<string, SolutionItem[]>()
   const uncategorized: SolutionItem[] = []
@@ -141,13 +146,11 @@ const groupedAndSorted = computed(() => {
     }
   }
 
-  // sort each group by displayName
   for (const [, items] of groups) {
     items.sort((a, b) => a.displayName.localeCompare(b.displayName))
   }
   uncategorized.sort((a, b) => a.displayName.localeCompare(b.displayName))
 
-  // categories sorted A→Z
   const categorized = Array.from(groups.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([category, items]) => ({ category, items }))
@@ -164,7 +167,6 @@ const groupedAndSorted = computed(() => {
       <p class="mt-2 text-sm text-muted-foreground">{{ $t('app.home.description') }}</p>
     </header>
 
-    <!-- Interactive zone: search + category filter -->
     <section aria-label="Filters" class="mb-6 flex flex-wrap-reverse gap-3 justify-end">
       <div class="flex-1">
         <Input
@@ -195,9 +197,7 @@ const groupedAndSorted = computed(() => {
       </div>
     </section>
 
-    <!-- Results -->
     <section aria-label="Solutions" class="w-full flex flex-col gap-8">
-      <!-- Categorized groups (each in a bordered fieldset with legend name) -->
       <div class="max-sm:space-y-6 sm:flex sm:flex-wrap gap-4">
         <fieldset
           v-for="group in groupedAndSorted.categorized"
@@ -218,7 +218,6 @@ const groupedAndSorted = computed(() => {
                 <Card
                   class="overflow-hidden min-w-56 relative py-4 transition duration-200 hover:shadow-md group-focus:ring-2 group-focus:ring-ring"
                 >
-                  <!-- Monogram badge (first letter) -->
                   <div class="absolute top-0.75 left-1 size-13 -rotate-6">
                     <div
                       class="flex h-full w-full items-center justify-center rounded-lg border bg-muted/60 text-2xl font-extrabold backdrop-blur"
@@ -228,12 +227,10 @@ const groupedAndSorted = computed(() => {
                     </div>
                   </div>
 
-                  <!-- Title and meta -->
                   <CardTitle class="ml-16 mr-8 text-base font-semibold">
                     {{ item.displayName }}
                   </CardTitle>
 
-                  <!-- Chevron appears on hover -->
                   <ChevronRight
                     class="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 opacity-0 transition group-hover:translate-x-1 group-hover:opacity-100 group-focus:translate-x-1 group-focus:opacity-100"
                     aria-hidden="true"
@@ -244,7 +241,6 @@ const groupedAndSorted = computed(() => {
           </ul>
         </fieldset>
       </div>
-      <!-- Uncategorized (no border, no legend, appears last) -->
       <div v-if="groupedAndSorted.uncategorized.length">
         <ul role="list" class="mt-2 flex max-sm:flex-col sm:w-fit flex-wrap gap-4">
           <li v-for="item in groupedAndSorted.uncategorized" :key="item.name">
@@ -256,7 +252,6 @@ const groupedAndSorted = computed(() => {
               <Card
                 class="overflow-hidden min-w-56 relative py-4 transition duration-200 hover:shadow-md group-focus:ring-2 group-focus:ring-ring"
               >
-                <!-- Monogram badge (first letter) -->
                 <div class="absolute top-0.75 left-1 size-13 -rotate-6">
                   <div
                     class="flex h-full w-full items-center justify-center rounded-lg border bg-muted/60 text-2xl font-extrabold backdrop-blur"
@@ -266,12 +261,10 @@ const groupedAndSorted = computed(() => {
                   </div>
                 </div>
 
-                <!-- Title and meta -->
                 <CardTitle class="ml-16 mr-8 text-base font-semibold">
                   {{ item.displayName }}
                 </CardTitle>
 
-                <!-- Chevron appears on hover -->
                 <ChevronRight
                   class="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 opacity-0 transition group-hover:translate-x-1 group-hover:opacity-100 group-focus:translate-x-1 group-focus:opacity-100"
                   aria-hidden="true"
@@ -282,7 +275,6 @@ const groupedAndSorted = computed(() => {
         </ul>
       </div>
 
-      <!-- Empty state -->
       <p
         v-if="!groupedAndSorted.categorized.length && !groupedAndSorted.uncategorized.length"
         class="text-sm text-muted-foreground"

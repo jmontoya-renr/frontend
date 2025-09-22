@@ -7,20 +7,24 @@ export interface Option {
   value: string
 }
 
-export interface TextFilterMeta {
+export interface FilterMetaCommon {
+  label?: string
+  order?: number
+}
+
+export interface TextFilterMeta extends FilterMetaCommon {
   type: 'text'
   param?: string
 }
 
-export interface DateRangeFilterMeta {
+export interface DateRangeFilterMeta extends FilterMetaCommon {
   type: 'dateRange'
   serverKeys: { from: string; to: string }
 }
 
-export interface OptionsLoaderCtx<TData = unknown> {
+export interface OptionsLoaderCtx<TData> {
   table: Table<TData>
   column: Column<TData, unknown>
-  /** Current value of another column's filter (raw TanStack value) */
   getColumnFilterValue: (columnId: string) => unknown
 }
 
@@ -28,13 +32,24 @@ export type OptionsSource<TData = unknown> =
   | Option[]
   | ((ctx: OptionsLoaderCtx<TData>) => Option[] | Promise<Option[]>)
 
-export interface MultiSelectFilterMeta<TData = unknown> {
+export interface MultiSelectFilterMeta<TData> extends FilterMetaCommon {
   type: 'multiSelect'
   param: string
   options: OptionsSource<TData>
 }
 
-export type ColumnFilterMeta = TextFilterMeta | DateRangeFilterMeta | MultiSelectFilterMeta
+export interface BooleanFilterMeta extends FilterMetaCommon {
+  type: 'boolean'
+  param?: string
+  trueLabel?: string // UI label for "true"
+  falseLabel?: string // UI label for "false"
+}
+
+export type ColumnFilterMeta =
+  | TextFilterMeta
+  | DateRangeFilterMeta
+  | MultiSelectFilterMeta
+  | BooleanFilterMeta
 
 export interface DateRangeValue {
   from?: string

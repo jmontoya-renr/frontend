@@ -48,7 +48,7 @@ const {
   Partial<GastoEventoInferido>,
   Partial<GastoEventoInferido>
 >({
-  baseUrl: 'http://localhost:9000/pbi_gasto/inferido/',
+  baseUrl: 'http://localhost:9000/pbi_gasto/inferido',
   idKey: 'id',
   initialParams: {
     limit: 50,
@@ -185,7 +185,7 @@ onBeforeUnmount(() => {
 })
 
 // ======= Edición de filas =======
-function isRowEditable(row: GastoEventoInferido, rowIndex: number) {
+function isRowEditable(row: GastoEventoInferido) {
   return editableOptions.value.map((e) => e.value).includes(row.empresa)
 }
 

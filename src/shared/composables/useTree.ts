@@ -7,13 +7,12 @@ function useTree(tree: Tree) {
   function normalize(str: string): string {
     return str
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // elimina tildes
+      .replace(/[\u0300-\u036f]/g, '') // removes accents
       .replace(/ñ/g, 'n')
       .replace(/Ñ/g, 'n')
       .toLowerCase()
   }
 
-  // recursivo
   function filterNode(node: TreeNode, query: string): TreeNode | null {
     const name = typeof node.name === 'function' ? node.name() : node.name
     if (normalize(name).includes(query) || normalize(node.route).includes(query)) {

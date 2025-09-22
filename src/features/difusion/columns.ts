@@ -1,5 +1,5 @@
 import type { Column, ColumnDef, Table } from '@tanstack/vue-table'
-import { h, nextTick, vShow, withDirectives } from 'vue'
+import { h, nextTick, vShow, withDirectives, type ComponentPublicInstance, type VNode } from 'vue'
 import type { Difusion } from '@/features/difusion/difusion'
 import DataTableColumnHeader from '@/shared/components/table/DataTableColumnHeader.vue'
 
@@ -11,6 +11,7 @@ import { today, getLocalTimeZone, CalendarDate } from '@internationalized/date'
 import { useEmpresasCatalog, useProductosCatalog } from './catalogs'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import type { WithId } from '@/shared/types/with-id'
+import { Trash2 } from 'lucide-vue-next'
 
 const {
   loaded: empLoaded,
@@ -34,21 +35,17 @@ void ensureProductosLoaded()
 void ensureEmpresasLoaded()
 
 function focusAllText(e: FocusEvent, value: string) {
-  // Focus + safe select-all for text-like inputs only
   nextTick(() => {
     const el = e.target as HTMLElement | null
     if (!el) return
-    if (!el.isConnected) return // element got unmounted/replaced
+    if (!el.isConnected) return
 
     try {
       el.focus({ preventScroll: true })
-    } catch {
-      // ignore focus errors (rare)
-    }
+    } catch {}
 
     const input = el as HTMLInputElement | HTMLTextAreaElement
 
-    // Only select on text-like controls; NEVER on <input type="number">
     const isTextArea = input instanceof HTMLTextAreaElement
     const isTextInput =
       input instanceof HTMLInputElement &&
@@ -57,9 +54,7 @@ function focusAllText(e: FocusEvent, value: string) {
     if ((isTextArea || isTextInput) && typeof input.setSelectionRange === 'function') {
       try {
         input.setSelectionRange(0, value.length)
-      } catch {
-        // Some browsers can still throw if the control isn't ready; ignore gracefully
-      }
+      } catch {}
     }
   })
 }
@@ -67,15 +62,10 @@ function focusAllText(e: FocusEvent, value: string) {
 type BoundsOpts = {
   min?: number
   max?: number
-  integer?: boolean // default true
-  allowEmpty?: boolean // default false
+  integer?: boolean
+  allowEmpty?: boolean
 }
 
-/** For <input type="number">:
- *  - blocks e/E/+/-/. when integer
- *  - clamps the value to [min, max] on each input (also after paste)
- *  - calls onValue(n) with the clamped number
- */
 function bindNumberBounds(opts: BoundsOpts, onValue: (n: number) => void) {
   const integer = opts.integer ?? true
 
@@ -106,9 +96,7 @@ function bindNumberBounds(opts: BoundsOpts, onValue: (n: number) => void) {
       const el = e.target as HTMLInputElement
       normalizeAndCommit(el)
     },
-    onPaste(_e: ClipboardEvent) {
-      // Let paste happen; normalization runs in onInput
-    },
+    onPaste(_e: ClipboardEvent) {},
     onBlur(e: FocusEvent) {
       const el = e.target as HTMLInputElement
       normalizeAndCommit(el)
@@ -127,7 +115,6 @@ function formatFechaEs(value: string | Date | null | undefined): string {
   }).format(d)
 }
 
-/** Safely read a numeric cell value (current edited value if available) and coerce to number */
 function getNum(
   table: Table<Difusion>,
   rowIndex: number,
@@ -152,9 +139,9 @@ function formatMoneyEs(n: number | string | null | undefined): string {
   }).format(v)
 }
 
-/** Recalculate all derived fields and write them to the row:
+/**
  *  - venta = venta_bloque + venta_kiosco
- *  - servicio = servicio_bloque + venta_bloque   (as requested)
+ *  - servicio = servicio_bloque + servicio_kiosco
  *  - difusion = venta + gratis + pago + colectivas
  *  - tirada = servicio + gratis + pago + colectivas
  */
@@ -162,13 +149,13 @@ function updateDerived(table: Table<Difusion>, rowIndex: number, rowOriginal: Di
   const venta_bloque = getNum(table, rowIndex, 'venta_bloque', rowOriginal)
   const venta_kiosco = getNum(table, rowIndex, 'venta_kiosco', rowOriginal)
   const servicio_bloque = getNum(table, rowIndex, 'servicio_bloque', rowOriginal)
-  const servicio_kiosco = getNum(table, rowIndex, 'servicio_kiosco', rowOriginal) // not used in servicio formula per spec
+  const servicio_kiosco = getNum(table, rowIndex, 'servicio_kiosco', rowOriginal)
   const gratis = getNum(table, rowIndex, 'gratis', rowOriginal)
   const pago = getNum(table, rowIndex, 'pago', rowOriginal)
   const colectivas = getNum(table, rowIndex, 'colectivas', rowOriginal)
 
   const venta = venta_bloque + venta_kiosco
-  const servicio = servicio_bloque + servicio_kiosco // spec: servicio_bloque + venta_bloque
+  const servicio = servicio_bloque + servicio_kiosco
   const difusion = venta + gratis + pago + colectivas
   const tirada = servicio + gratis + pago + colectivas
 
@@ -542,7 +529,7 @@ export const columns: Array<ColumnDef<Difusion>> = [
       h(DataTableColumnHeader, { column: column as unknown as Column<WithId>, title: 'Servicio' }),
     cell: ({ row, table }) => {
       const servicio_bloque = getNum(table, row.index, 'servicio_bloque', row.original)
-      const servicio_kiosco = getNum(table, row.index, 'servicio_kiosco', row.original) // per spec
+      const servicio_kiosco = getNum(table, row.index, 'servicio_kiosco', row.original)
       const total = servicio_bloque + servicio_kiosco
       return h('p', { class: 'w-full pr-4 truncate font-medium text-right' }, formatMoneyEs(total))
     },
@@ -659,7 +646,6 @@ export const columns: Array<ColumnDef<Difusion>> = [
     header: ({ column }) =>
       h(DataTableColumnHeader, { column: column as unknown as Column<WithId>, title: 'Venta' }),
     cell: ({ row, table }) => {
-      // Always compute from base fields; no input (read-only)
       const venta_bloque = getNum(table, row.index, 'venta_bloque', row.original)
       const venta_kiosco = getNum(table, row.index, 'venta_kiosco', row.original)
       const total = venta_bloque + venta_kiosco
@@ -838,7 +824,7 @@ export const columns: Array<ColumnDef<Difusion>> = [
       h(DataTableColumnHeader, { column: column as unknown as Column<WithId>, title: 'Tirada' }),
     cell: ({ row, table }) => {
       const servicio_bloque = getNum(table, row.index, 'servicio_bloque', row.original)
-      const servicio_kiosco = getNum(table, row.index, 'servicio_kiosco', row.original) // per spec
+      const servicio_kiosco = getNum(table, row.index, 'servicio_kiosco', row.original)
       const servicio = servicio_bloque + servicio_kiosco
       const gratis = getNum(table, row.index, 'gratis', row.original)
       const pago = getNum(table, row.index, 'pago', row.original)
@@ -849,5 +835,87 @@ export const columns: Array<ColumnDef<Difusion>> = [
     minSize: 120,
     size: 140,
     meta: { editable: false },
+  },
+  {
+    id: 'delete',
+    header: () => h('span', { class: 'sr-only' }, 'Eliminar'),
+
+    cell: ({ row, column, table }) => {
+      const perform = async () => {
+        void table.options.meta?.deleteRowAtAsync?.(row.index)
+      }
+
+      const onClick = (e: MouseEvent) => {
+        e.stopPropagation()
+        perform()
+      }
+
+      const onKeydown = (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          perform()
+        }
+      }
+
+      if (
+        table.options.meta &&
+        table.options.meta.isRowEditable &&
+        !table.options.meta.isRowEditable(row.original)
+      ) {
+        return
+      }
+
+      const isEditing =
+        table.options.meta &&
+        table.options.meta.isCellEditing &&
+        table.options.meta.isCellEditing(row.index, column.getIndex())
+
+      const focusDom = (el: Element | null): void => {
+        if (!el || !isEditing) return
+        requestAnimationFrame(() => {
+          try {
+            ;(el as HTMLButtonElement).focus({ preventScroll: true })
+          } catch {}
+        })
+      }
+
+      const setBtnRef = (el: Element | ComponentPublicInstance | null) => {
+        focusDom(el as Element | null)
+      }
+
+      const onMountedHook = (v: VNode) => focusDom(v.el as Element | null)
+      const onUpdatedHook = (v: VNode) => focusDom(v.el as Element | null)
+
+      return h(
+        'button',
+        {
+          type: 'button',
+          title: 'Eliminar fila',
+          'aria-label': 'Eliminar fila',
+          class:
+            'inline-flex items-center justify-center h-8 w-8 rounded-md ' +
+            'text-destructive hover:bg-destructive/10 ' +
+            'focus:outline-none focus:ring-2 focus:ring-destructive/40',
+          onClick,
+          onKeydown,
+          onMousedown: (e: MouseEvent) => e.stopPropagation(),
+          ref: setBtnRef,
+          onVnodeMounted: onMountedHook,
+          onVnodeUpdated: onUpdatedHook,
+          autofocus: isEditing,
+        },
+        [h(Trash2, { class: 'size-4' })],
+      )
+    },
+
+    enableSorting: false,
+    enableHiding: false,
+    enableResizing: false,
+    size: 56,
+    minSize: 56,
+    maxSize: 56,
+
+    meta: { fixedLast: true },
   },
 ]

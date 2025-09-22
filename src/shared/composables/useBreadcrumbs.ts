@@ -15,19 +15,13 @@ function useBreadcrumbs() {
       }
     })
 
-    // Siempre incluir "Portal SED"
     const all = [{ name: 'Portal SED', pathName: 'app.home' }, ...matched]
 
     if (all.length <= 4) {
       return all
     }
 
-    return [
-      all[0], // Portal SED
-      all[1], // Primer hijo
-      { name: '...', pathName: '' }, // truncado
-      all[all.length - 1], // Último hijo
-    ]
+    return [all[0], all[1], { name: '...', pathName: '' }, all[all.length - 1]]
   })
 
   return { breadcrumbs }

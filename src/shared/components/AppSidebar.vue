@@ -34,7 +34,6 @@ function logout() {
   router.push({ name: 'auth.login' })
 }
 
-// This is sample data.
 const data = {
   user: {
     name: auth.user.nombre!,

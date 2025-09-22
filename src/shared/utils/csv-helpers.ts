@@ -1,10 +1,11 @@
-export function convertToCSV(records: Task[]): string {
-  const header = Object.keys(records[0]) // Obtener las claves de las columnas
+import type { WithId } from '@/shared/types/with-id'
+
+export function convertToCSV<T extends WithId>(records: Array<T>): string {
+  const header = Object.keys(records[0])
   const rows = records.map((record) => {
-    return header.map((key) => `"${record[key]}"`).join(',') // Crear cada fila en formato CSV
+    return header.map((key) => `"${record[key as keyof T]}"`).join(',')
   })
 
-  // Unir cabeceras con las filas de datos
   return [header.join(','), ...rows].join('\n')
 }
 

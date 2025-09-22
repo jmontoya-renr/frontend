@@ -16,11 +16,9 @@ const route = useRoute()
 
 const SEP = '::' as const
 
-// type guard for route names
 const isStrName = (n: RouteRecordName | null | undefined): n is string =>
   typeof n === 'string' && n.length > 0
 
-// extract solutionId from "SOLUTION::page"
 const extractSolutionId = (fullName: string): string => {
   const i = fullName.indexOf(SEP)
   return i === -1 ? fullName : fullName.slice(0, i)

@@ -9,7 +9,7 @@ import { CalendarIcon, Mail, MailOpen } from 'lucide-vue-next'
 import { ScrollArea } from '@/shared/components/ui/scroll-area'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
-import { useMessagesLazy } from '../composables/useMessagesLazy'
+import { useMessagesLazy } from '@/shared/composables/useMessagesLazy'
 
 const props = defineProps<{
   solution_id: number
@@ -18,7 +18,6 @@ const props = defineProps<{
 const isNotificationsOpen = ref(false)
 const { messages, status, load } = useMessagesLazy(props.solution_id)
 
-// dispara la carga solo al abrir (no bloquea la app)
 watch(isNotificationsOpen, (open) => {
   if (open) load()
 })

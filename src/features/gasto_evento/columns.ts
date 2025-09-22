@@ -91,7 +91,17 @@ export const columns: Array<ColumnDef<GastoEvento>> = [
     size: 56,
     minSize: 56,
     maxSize: 56,
-    meta: { fixedFirst: true },
+    meta: {
+      fixedFirst: true,
+      filter: {
+        type: 'boolean',
+        param: 'sin_completar',
+        label: 'Mostrar filas',
+        order: 10,
+        trueLabel: 'Filas sin completar',
+        falseLabel: 'Todas las filas',
+      },
+    },
   },
 
   /* =================== LECTURA (readonly) =================== */
@@ -118,6 +128,8 @@ export const columns: Array<ColumnDef<GastoEvento>> = [
       filter: {
         type: 'multiSelect',
         param: 'empresas',
+        label: 'Sociedades',
+        order: 1,
         options: async () => {
           if (!empLoaded.value) await ensureEmpresasLoaded()
           // empresaOptions ya trae {label, value:string} en la mayoría de implementaciones
@@ -151,7 +163,12 @@ export const columns: Array<ColumnDef<GastoEvento>> = [
     size: 150,
     meta: {
       editable: false,
-      filter: { type: 'dateRange', serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' } },
+      filter: {
+        type: 'dateRange',
+        serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' },
+        label: 'Fechas',
+        order: 3,
+      },
     },
   },
 
@@ -224,7 +241,10 @@ export const columns: Array<ColumnDef<GastoEvento>> = [
     cell: ({ row }) => ro(String(row.getValue('texto_asiento') ?? '')),
     minSize: 220,
     size: 280,
-    meta: { editable: false, filter: { type: 'text', param: 'texto_asiento' } },
+    meta: {
+      editable: false,
+      filter: { type: 'text', param: 'texto_asiento', label: 'Texto del asiento', order: 2 },
+    },
   },
 
   // IMPORTE (readonly)

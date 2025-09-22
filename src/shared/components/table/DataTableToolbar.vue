@@ -4,14 +4,15 @@ import { computed, onMounted, reactive, watch, type VNode } from 'vue'
 
 import { X } from 'lucide-vue-next'
 import { Button } from '@/shared/components/ui/button'
+import Separator from '@/shared/components/ui/separator/Separator.vue'
 
-import Separator from '../ui/separator/Separator.vue'
 import type { WithId } from '@/shared/types/with-id'
 
 import type {
   ColumnFilterMeta,
   DateRangeFilterMeta,
   MultiSelectFilterMeta,
+  BooleanFilterMeta,
   TextFilterMeta,
   Option,
   DateRangeValue,
@@ -33,17 +34,22 @@ const props = defineProps<DataTableToolbarProps>()
 const tz = getLocalTimeZone()
 const todayDV: DateValue = today(tz)
 
-/* -------------------- Type guards -------------------- */
 const isText = (m: ColumnFilterMeta): m is TextFilterMeta => m.type === 'text'
 const isDateRange = (m: ColumnFilterMeta): m is DateRangeFilterMeta => m.type === 'dateRange'
-const isMulti = (m: ColumnFilterMeta): m is MultiSelectFilterMeta => m.type === 'multiSelect'
+const isMulti = (m: ColumnFilterMeta): m is MultiSelectFilterMeta<T> => m.type === 'multiSelect'
+const isBoolean = (m: ColumnFilterMeta): m is BooleanFilterMeta => m.type === 'boolean'
 
 interface FilterableCol<T> {
   col: Column<T>
   meta: ColumnFilterMeta
 }
 
-/** ---------- Helpers: typed, no `any` ---------- */
+function getFilterLabel<T>(f: FilterableCol<T>): string {
+  const custom = f.meta.label
+  if (typeof custom === 'string' && custom.trim()) return custom
+  return getColumnTitle(f.col)
+}
+
 function normalizeValue(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(normalizeValue)
   if (v && typeof v === 'object') {
@@ -79,7 +85,6 @@ const initialFiltersNormalized = computed<ColumnFiltersState>(() =>
 )
 
 const currentColumnFilters = computed<ColumnFiltersState>(() => {
-  // TanStack Table state; keep it typed
   const state = props.table.getState() as { columnFilters?: ColumnFiltersState }
   return state.columnFilters ? sortFilters(state.columnFilters) : []
 })
@@ -90,41 +95,28 @@ const isInitialState = computed<boolean>(() =>
 
 const showReset = computed<boolean>(() => !isInitialState.value)
 
-/* -------------------- Title extraction -------------------- */
-/** Get a human-readable title for a column:
- *  - If header is string → use it
- *  - If header is function that returns <DataTableColumnHeader :title="..."> → read vnode.props.title
- *  - Fallback to column id
- */
 function getColumnTitle<T>(col: Column<T, unknown>): string {
   const header = col.columnDef.header
 
-  // header as a plain string
   if (typeof header === 'string') return header
 
-  // header as a function returning a VNode (like h(DataTableColumnHeader, { title: '...' }))
   if (typeof header === 'function') {
     try {
-      // TanStack passes { column, table } habitualmente; con 'vue-table' al menos 'column'
       const vnode = (header as (ctx: { column: Column<T, unknown> }) => VNode)({ column: col })
       const maybeTitle = (vnode?.props as Readonly<Record<string, unknown>> | null | undefined)
         ?.title
       if (typeof maybeTitle === 'string' && maybeTitle.trim().length > 0) {
         return maybeTitle
       }
-    } catch {
-      // si algo falla, hacemos fallback
-    }
+    } catch {}
   }
 
-  // fallback
   const id = (col.id ??
     (col.columnDef as { id?: string; accessorKey?: string }).accessorKey ??
     '') as string
   return id || '—'
 }
 
-/* -------------------- Column selection -------------------- */
 const filterableColumns = computed<Array<FilterableCol<T>>>(() =>
   props.table
     .getAllLeafColumns()
@@ -132,7 +124,14 @@ const filterableColumns = computed<Array<FilterableCol<T>>>(() =>
       const meta = c.columnDef.meta?.filter
       return meta ? ({ col: c, meta } as FilterableCol<T>) : null
     })
-    .filter((x): x is FilterableCol<T> => x !== null),
+    .filter((x): x is FilterableCol<T> => x !== null)
+    .sort((a, b) => {
+      // sort by meta.order (undefined -> Infinity), tie-breaker by column id
+      const ao = a.meta?.order ?? Number.POSITIVE_INFINITY
+      const bo = b.meta?.order ?? Number.POSITIVE_INFINITY
+      if (ao !== bo) return ao - bo
+      return a.col.id < b.col.id ? -1 : a.col.id > b.col.id ? 1 : 0
+    }),
 )
 
 function toDV(s: string | undefined): DateValue | null {
@@ -146,13 +145,11 @@ function toDV(s: string | undefined): DateValue | null {
   }
 }
 
-// ⬇️ NEW: normalize string "YYYY-MM-DD" (or undefined)
 function normDateStr(s: string | undefined | null): string | undefined {
   const m = typeof s === 'string' ? /^(\d{4}-\d{2}-\d{2})/.exec(s) : null
   return m ? m[1] : undefined
 }
 
-// ⬇️ NEW: per-column constraints for the pickers
 function getFromMaxDV(columnId: string): DateValue {
   const toStr = normDateStr(dateInputs[columnId]?.to)
   return toDV(toStr) ?? todayDV
@@ -162,24 +159,20 @@ function getToMinDV(columnId: string): DateValue | null {
   return toDV(fromStr)
 }
 
-/* -------------------- Local state (synced with TanStack) -------------------- */
 const textInputs = reactive<Record<string, string>>({})
 const dateInputs = reactive<Record<string, DateRangeValue>>({})
 const multiInputs = reactive<Record<string, string[]>>({})
 const optionsMap = reactive<Record<string, SelectOption[]>>({})
+const booleanInputs = reactive<Record<string, 'true' | 'false'>>({})
+
 const loading = reactive<Record<string, boolean>>({})
 
-/* -------------------- Utils -------------------- */
 function debounce<T extends (...args: never[]) => void>(fn: T, ms: number): T {
   let t: number | undefined
   return ((...args: Parameters<T>) => {
     window.clearTimeout(t)
     t = window.setTimeout(() => fn(...args), ms)
   }) as T
-}
-
-function toSelectOptions(arr: ReadonlyArray<Option>): SelectOption[] {
-  return arr.map((o) => ({ label: o.label, value: String(o.value) }))
 }
 
 function getColumnFilterValue(columnId: string): unknown {
@@ -205,13 +198,11 @@ async function loadMultiOptions<T>(f: FilterableCol<T>): Promise<void> {
       getColumnFilterValue,
     }
     const raw = await ensureOptionArray<T>(f.meta.options as OptionsSource<T>, ctx)
-    optionsMap[id] = toSelectOptions(raw)
+    optionsMap[id] = raw
 
-    // 🔁 re-lee el valor actual del filtro en la tabla y normalízalo a string[]
     const tableVal = f.col.getFilterValue()
     multiInputs[id] = Array.isArray(tableVal) ? (tableVal as unknown[]).map((v) => String(v)) : []
 
-    // 🔒 elimina valores que no existan en las opciones (por si acaso)
     sanitizeMultiSelection(id)
   } finally {
     loading[id] = false
@@ -228,14 +219,13 @@ function sanitizeMultiSelection(id: string): void {
     const col = filterableColumns.value.find((f) => f.col.id === id)?.col
     if (!col) return
     if (next.length === 0) {
-      col.setFilterValue(undefined) // ← elimina el filtro si ya no quedan valores válidos
+      col.setFilterValue(undefined)
     } else {
       col.setFilterValue(next)
     }
   }
 }
 
-/* -------------------- Init -------------------- */
 onMounted(async () => {
   for (const f of filterableColumns.value) {
     const id = f.col.id
@@ -249,11 +239,12 @@ onMounted(async () => {
     } else if (isMulti(f.meta)) {
       multiInputs[id] = Array.isArray(current) ? (current as string[]) : []
       await loadMultiOptions(f)
+    } else if (isBoolean(f.meta)) {
+      booleanInputs[id] = current ? 'true' : 'false'
     }
   }
 })
 
-/* -------------------- Handlers -------------------- */
 const setTextFilterDebounced = debounce((id: string, v: string) => {
   const col = filterableColumns.value.find((f) => f.col.id === id)?.col
   col?.setFilterValue(v)
@@ -264,9 +255,7 @@ function onDateChange(id: string, key: 'from' | 'to', value: string | null): voi
   const fromStr = normDateStr(key === 'from' ? value : curr.from)
   let toStr = normDateStr(key === 'to' ? value : curr.to)
 
-  // If both set and invalid order, fix it:
   if (fromStr && toStr && toStr < fromStr) {
-    // Clamp "to" up to "from" (UX-friendly, avoids surprises)
     toStr = fromStr
   }
 
@@ -293,15 +282,19 @@ function onMultiChange(id: string, values: string[]): void {
   }
 }
 
+function onBooleanChange(id: string, value: 'true' | 'false'): void {
+  booleanInputs[id] = value
+  const col = filterableColumns.value.find((f) => f.col.id === id)?.col
+  if (!col) return
+  col.setFilterValue(value === 'true')
+}
+
 function clearAll(): void {
-  // If initialColumnFilters is provided (and possibly non-empty), restore it.
-  // Otherwise, clear everything (no filters).
   const next: ColumnFiltersState =
     props.initialColumnFilters && props.initialColumnFilters.length
       ? [...props.initialColumnFilters]
       : []
   props.table.setColumnFilters(next)
-  // Los inputs locales se sincronizan vía el watch de columnFilters del propio toolbar.
 }
 
 watch(
@@ -317,21 +310,27 @@ watch(
         const v = (val ?? {}) as DateRangeValue
         dateInputs[id] = { from: v.from, to: v.to }
       } else if (isMulti(f.meta)) {
-        // normaliza a string[]
         multiInputs[id] = Array.isArray(val) ? (val as unknown[]).map((x) => String(x)) : []
 
-        // si las opciones ya están, depura selección inválida
         if ((optionsMap[id]?.length ?? 0) > 0) sanitizeMultiSelection(id)
 
-        // si las opciones son dinámicas, recárgalas
         if (typeof f.meta.options === 'function') {
           await loadMultiOptions(f)
         }
+      } else if (isBoolean(f.meta)) {
+        booleanInputs[id] = val ? 'true' : 'false'
       }
     }
   },
   { deep: true },
 )
+
+function getBooleanOptions<T>(f: FilterableCol<T>): SelectOption[] {
+  return [
+    { label: f.meta.trueLabel ?? 'Sí', value: 'true' },
+    { label: f.meta.falseLabel ?? 'No', value: 'false' },
+  ]
+}
 </script>
 
 <template>
@@ -340,23 +339,23 @@ watch(
       {{ $t('forms.results', table.getRowCount()) }}
     </span>
     <Separator orientation="vertical" class="max-h-6" />
-    <span class="flex flex-1 justify-start items-center gap-3 overflow-scroll">
+    <span class="flex flex-1 justify-start items-center gap-3 pb-1 overflow-scroll">
       <template v-for="f in filterableColumns" :key="f.col.id">
         <!-- TEXT -->
         <div v-if="f.meta.type === 'text'" class="flex flex-col">
-          <label class="text-xs font-medium mb-1">{{ getColumnTitle(f.col) }}</label>
+          <label class="text-xs font-medium mb-1">{{ getFilterLabel(f) }}</label>
           <input
             type="text"
-            class="border rounded px-2 py-1"
+            class="placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-80 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive"
             :value="textInputs[f.col.id] ?? ''"
             :placeholder="`Filtrar ${getColumnTitle(f.col)}`"
             @input="(e) => setTextFilterDebounced(f.col.id, (e.target as HTMLInputElement).value)"
           />
         </div>
 
-        <!-- DATE RANGE (two DatePickerPopover controls) -->
+        <!-- DATE RANGE  -->
         <div v-else-if="f.meta.type === 'dateRange'" class="flex flex-col">
-          <label class="text-xs font-medium mb-1">{{ getColumnTitle(f.col) }}</label>
+          <label class="text-xs font-medium mb-1">{{ getFilterLabel(f) }}</label>
           <div class="flex items-center gap-2">
             <DatePickerPopover
               :model-value="dateInputs[f.col.id]?.from ?? null"
@@ -377,9 +376,9 @@ watch(
           </div>
         </div>
 
-        <!-- MULTI-SELECT (ComboboxSelect with multiple) -->
+        <!-- MULTI-SELECT -->
         <div v-else-if="f.meta.type === 'multiSelect'" class="flex flex-col min-w-[16rem]">
-          <label class="text-xs font-medium mb-1">{{ getColumnTitle(f.col) }}</label>
+          <label class="text-xs font-medium mb-1">{{ getFilterLabel(f) }}</label>
           <ComboboxSelect
             :model-value="multiInputs[f.col.id] ?? []"
             :options="optionsMap[f.col.id] ?? []"
@@ -392,6 +391,21 @@ watch(
               (vals: string[] | string | null) =>
                 onMultiChange(f.col.id, Array.isArray(vals) ? vals : vals ? [vals] : [])
             "
+          />
+        </div>
+
+        <!-- BOOLEAN -->
+        <div v-else-if="f.meta.type === 'boolean'" class="flex flex-col min-w-[12rem]">
+          <label class="text-xs font-medium mb-1">{{ getFilterLabel(f) }}</label>
+          <ComboboxSelect
+            :model-value="booleanInputs[f.col.id] ?? null"
+            :options="getBooleanOptions(f)"
+            :loading="false"
+            :disabled="false"
+            :clearable="false"
+            :search-enabled="false"
+            placeholder="Selecciona…"
+            @update:model-value="(val) => onBooleanChange(f.col.id, val as 'true' | 'false')"
           />
         </div>
       </template>

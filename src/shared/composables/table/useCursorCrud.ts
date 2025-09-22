@@ -1,10 +1,9 @@
 import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 import api from '@/plugins/axios'
+import { isAxiosError } from 'axios'
 
 import type { MetaData, PaginationData, ResponseData } from '@/shared/schemas/api-data-response'
-
-// ==== Tipos del composable ====
 
 export type SortOrder = 'asc' | 'desc'
 export type Filters = Record<string, Array<string>>
@@ -47,6 +46,22 @@ export interface UseCursorCrudReturn<T, Id extends string | number, C, U>
   remove: (id: Id) => Promise<void>
 }
 
+function isCanceledError(err: unknown): boolean {
+  return (
+    (isAxiosError(err) && err.code === 'ERR_CANCELED') ||
+    (err instanceof DOMException && err.name === 'AbortError')
+  )
+}
+
+function toErrorMessage(err: unknown): string {
+  if (isAxiosError(err)) return err.message
+  if (err instanceof Error) return err.message
+  return 'Error desconocido'
+}
+
+export const rstrip = (s: string, char: string = ''): string =>
+  s.endsWith(char) ? s.slice(0, -1) : s
+
 function serializeParams(p: ListParams): Record<string, unknown> {
   const out: Record<string, unknown> = {}
 
@@ -55,7 +70,6 @@ function serializeParams(p: ListParams): Record<string, unknown> {
   if (p.sort_order) out.sort_order = p.sort_order
   if (typeof p.limit === 'number') out.limit = p.limit
 
-  // Filtros individuales
   if (p.filters) {
     for (const [key, values] of Object.entries(p.filters)) {
       if (values.length > 0) out[key] = values
@@ -102,53 +116,78 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
     () => typeof meta.value.prev_cursor === 'string' && meta.value.prev_cursor.length > 0,
   )
 
-  // dentro del composable
   const lastKey = ref<string | null>(null)
   const keyOf = (p: ListParams) => JSON.stringify(serializeParams(p))
+  const reqSeq = ref(0)
+  const controller = ref<AbortController | null>(null)
+
+  function abortPending() {
+    try {
+      controller.value?.abort()
+    } finally {
+      controller.value = null
+      reqSeq.value++
+      loading.value = false
+    }
+  }
 
   async function fetch(override?: Partial<ListParams>): Promise<void> {
-    loading.value = true
-    error.value = null
     const merged: ListParams = {
       ...stateParams.value,
       ...override,
       filters: override?.filters ?? stateParams.value.filters,
     }
     const k = keyOf(merged)
-    if (lastKey.value === k) {
-      loading.value = false
-      return
-    } // ✅ dedupe
+    if (lastKey.value === k && loading.value) return
+
     lastKey.value = k
+    const mySeq = ++reqSeq.value
+
     try {
-      const { data } = await api.get<PaginationData<T>>(config.baseUrl, {
+      controller.value?.abort()
+    } catch {}
+    controller.value = new AbortController()
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const { data } = await api.get<PaginationData<T>>(`${rstrip(config.baseUrl, '/')}/`, {
         params: serializeParams(merged),
       })
-      items.value = [...items.value, ...data.content] // tu append
+      if (mySeq !== reqSeq.value) return
+
+      items.value = [...items.value, ...data.content]
       meta.value = data.meta
       stateParams.value = { ...merged }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Error desconocido'
+    } catch (err: unknown) {
+      if (!isCanceledError(err) && mySeq === reqSeq.value) {
+        error.value = toErrorMessage(err)
+      }
     } finally {
-      loading.value = false
+      if (mySeq === reqSeq.value) {
+        loading.value = false
+        controller.value = null
+      }
     }
   }
 
   async function refresh(): Promise<void> {
-    // Reinicia el listado antes de volver a cargar (pero el fetch seguirá haciendo append)
+    abortPending()
     items.value = []
     setCursor(undefined)
     await fetch()
   }
 
   function setFilters(filters: Filters): void {
-    // Cada cambio reinicia el listado; el siguiente fetch hará append desde cero
+    abortPending()
     items.value = []
     stateParams.value = { ...stateParams.value, filters, cursor: undefined }
   }
 
   function setFilter(key: string, values: Array<string>): void {
     const current = stateParams.value.filters ?? {}
+    abortPending()
     items.value = []
     stateParams.value = {
       ...stateParams.value,
@@ -158,17 +197,19 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
   }
 
   function clearFilters(): void {
+    abortPending()
     items.value = []
     stateParams.value = { ...stateParams.value, filters: {}, cursor: undefined }
   }
 
   function setSort(sort_by: string, sort_order: SortOrder = 'asc'): void {
+    abortPending()
     items.value = []
     stateParams.value = { ...stateParams.value, sort_by, sort_order, cursor: undefined }
   }
 
   function clearSort(): void {
-    // Reinicia listado y borra sort_by/sort_order. El siguiente fetch hará append desde cero.
+    abortPending()
     items.value = []
     stateParams.value = {
       ...stateParams.value,
@@ -179,6 +220,7 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
   }
 
   function setLimit(limit: number): void {
+    abortPending()
     items.value = []
     stateParams.value = { ...stateParams.value, limit, cursor: undefined }
   }
@@ -200,18 +242,18 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
   }
 
   function reset(): void {
+    abortPending()
     items.value = []
     meta.value = {}
     error.value = null
     stateParams.value = {
       limit: 25,
-      sort_order: 'asc',
       ...config.initialParams,
     }
   }
 
   async function create(payload: C): Promise<ResponseData<T>> {
-    const { data } = await api.post<ResponseData<T>>(config.baseUrl, payload)
+    const { data } = await api.post<ResponseData<T>>(`${rstrip(config.baseUrl, '/')}/`, payload)
     items.value = [data.content, ...items.value]
     if (typeof meta.value.returned === 'number') {
       meta.value.returned = meta.value.returned + 1
@@ -220,7 +262,7 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
   }
 
   async function update(id: Id, payload: U): Promise<ResponseData<T>> {
-    const url = `${config.baseUrl}/${id}`
+    const url = `${rstrip(config.baseUrl, '/')}/${id}`
     const method = config.usePatchForUpdate ? 'patch' : 'put'
     const { data } = await api[method]<ResponseData<T>>(url, payload as unknown)
     const idx = findIndexById<T, Id>(items.value, idKey, id)
@@ -233,7 +275,7 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
   }
 
   async function remove(id: Id): Promise<void> {
-    const url = `${config.baseUrl}/${id}`
+    const url = `${rstrip(config.baseUrl, '/')}/${id}`
     await api.delete<void>(url)
     const idx = findIndexById<T, Id>(items.value, idKey, id)
     if (idx >= 0) {
@@ -247,15 +289,13 @@ export function useCursorCrud<T, Id extends string | number, C = unknown, U = Pa
   }
 
   return {
-    // estado
     items,
     meta,
     loading,
     error,
     hasNext,
     hasPrev,
-    params: stateParams, // sin Readonly
-    // navegación y control
+    params: stateParams,
     fetch,
     refresh,
     setFilters,

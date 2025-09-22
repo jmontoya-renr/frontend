@@ -19,7 +19,6 @@ ui.initLang()
 
 const DEFAULT_TITLE = 'Portal SED - Prensa Ibérica'
 
-// coge el title de la última ruta matcheada (más específica)
 const pageTitle = computed(() => {
   const m = route.matched
   const last = m.length ? m[m.length - 1] : null
@@ -29,7 +28,6 @@ const pageTitle = computed(() => {
   return typeof title === 'function' ? title() : (title ?? DEFAULT_TITLE)
 })
 
-// Document.title con VueUse (plantilla opcional)
 useTitle(
   computed(() => pageTitle.value),
   {

@@ -54,7 +54,6 @@ export const SolucionSociedadSchema = z.object({
   id_usuario_solucion_sociedad: z.number(),
   rol: RolSchema,
   activo: z.boolean(),
-  // En tu ejemplo viene null; permito también el objeto por si se usa en el futuro.
   actividad: ActividadSchema.nullable(),
 })
 
