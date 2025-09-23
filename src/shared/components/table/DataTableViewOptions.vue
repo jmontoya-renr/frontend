@@ -29,7 +29,7 @@ function isFixedLastColumn(col: Column<T>): boolean {
   return !!meta?.fixedLast
 }
 
-function arraysEqual(a: string[], b: string[]): boolean {
+function arraysEqual(a: Array<string>, b: Array<string>): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i])
 }
 
@@ -37,22 +37,22 @@ const leafIds = computed(() => allColumns.value.map((c) => c.id))
 
 const allColumns = computed<Column<T>[]>(() => props.table.getAllLeafColumns())
 
-const fixedFirstIds = computed<string[]>(() =>
+const fixedFirstIds = computed<Array<string>>(() =>
   allColumns.value.filter((c) => isFixedFirstColumn(c)).map((c) => c.id),
 )
 
-const fixedLastIds = computed<string[]>(() =>
+const fixedLastIds = computed<Array<string>>(() =>
   allColumns.value.filter((c) => isFixedLastColumn(c)).map((c) => c.id),
 )
 
-function forcePinned(order: string[]): string[] {
+function forcePinned(order: Array<string>): Array<string> {
   const first = fixedFirstIds.value
   const last = fixedLastIds.value
   if (first.length === 0 && last.length === 0) return order
 
   // Dedupe helper to avoid duplicates if arrays overlap
   const seen = new Set<string>()
-  const dedupe = (arr: string[]) => arr.filter((id) => !seen.has(id) && (seen.add(id), true))
+  const dedupe = (arr: Array<string>) => arr.filter((id) => !seen.has(id) && (seen.add(id), true))
 
   const inOrder = new Set(order)
   const middle = order.filter((id) => !first.includes(id) && !last.includes(id))
@@ -67,7 +67,7 @@ function forcePinned(order: string[]): string[] {
   return dedupe([...firstPresent, ...firstMissing, ...middle, ...lastPresent, ...lastMissing])
 }
 
-const orderedIds = computed<string[]>(() => {
+const orderedIds = computed<Array<string>>(() => {
   const state = props.table.getState() as TableState
   const order = state.columnOrder ?? []
   const sanitized = order.filter((id) => leafIds.value.includes(id))
@@ -80,7 +80,7 @@ const idToCol = computed(() => new Map(allColumns.value.map((c) => [c.id, c])))
 const visibleColumnsOrdered = computed(() =>
   orderedIds.value
     .map((id) => idToCol.value.get(id))
-    .filter((c): c is Column<T, unknown> => Boolean(c && c.getIsVisible())),
+    .filter((c): c is Column<T> => Boolean(c && c.getIsVisible())),
 )
 
 const firstMovableIndex = computed<number>(() => {
@@ -105,7 +105,7 @@ const hiddenColumns = computed(() =>
   ),
 )
 
-function setOrder(newOrder: string[]) {
+function setOrder(newOrder: Array<string>) {
   props.table.setColumnOrder(forcePinned(newOrder))
 }
 

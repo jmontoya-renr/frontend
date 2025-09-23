@@ -28,7 +28,7 @@ const tz = getLocalTimeZone()
 const todayDv: DateValue = today(tz)
 const firstDayOfThisMonth: DateValue = new CalendarDate(todayDv.year, todayDv.month, 1)
 
-function buildInitialFilters(): Record<string, string[]> {
+function buildInitialFilters(): Record<string, Array<string>> {
   return {
     fecha_inicio: [firstDayOfThisMonth.toString()],
     fecha_fin: [todayDv.toString()],
@@ -56,7 +56,7 @@ const {
   },
 })
 
-const initialFilters = ref<Record<string, string[]>>({})
+const initialFilters = ref<Record<string, Array<string>>>({})
 async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } | null) {
   booting.value = false
   if (p) {
@@ -67,7 +67,7 @@ async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } |
   await fetch()
 }
 
-type ServerFilters = Record<string, string[]>
+type ServerFilters = Record<string, Array<string>>
 
 function mergeWithDefaults(incoming: ServerFilters): ServerFilters {
   const base = initialFilters.value

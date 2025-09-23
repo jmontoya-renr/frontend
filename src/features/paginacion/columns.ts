@@ -13,6 +13,8 @@ import { Checkbox } from '@/shared/components/ui/checkbox'
 import type { WithId } from '@/shared/types/with-id'
 import { Trash2 } from 'lucide-vue-next'
 
+import type { OptionsLoaderCtx } from '@/features/datatable/types/table-filters'
+
 const {
   loaded: empLoaded,
   loading: empLoading,
@@ -166,7 +168,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       fixedFirst: true,
     },
   },
-  /* === EMPRESA (select al editar) === */
+  /* === EMPRESA (select on create) === */
   {
     accessorKey: 'empresa',
     header: ({ column }) => {
@@ -183,11 +185,10 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         table.options.meta?.getCellValue?.(row.index, 'empresa', row.original) ??
         (row.getValue('empresa') as string | null)
 
-      // texto de vista
       const friendly = empresaByCodigo.value.get(String(value ?? ''))?.nombre ?? value ?? ''
 
       const createOnly = column.columnDef.meta?.createOnly === true
-      if (createOnly && !isEditing) return h('p', { class: 'truncate' }, friendly)
+      if (createOnly || !isEditing) return h('p', { class: 'truncate' }, friendly)
 
       const opts: ReadonlyArray<SelectOption> = empresaEditableOptions.value
       const disabled = opts.length === 0 || empLoading.value
@@ -199,7 +200,6 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         disabled,
         loading: empLoading.value,
         clearable: false,
-        // al cambiar la empresa, invalidamos producto si no coincide
         'onUpdate:modelValue': (next) => {
           const nextEmpresa = next ?? ''
           table.options.meta?.setRowField?.(
@@ -237,28 +237,26 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       filter: {
         type: 'multiSelect',
         param: 'empresas',
+        label: 'Sociedades',
+        order: 1,
         options: async () => {
-          // Espera a que el catálogo esté listo
           if (!empLoaded.value) await ensureEmpresasLoaded()
-          // Devuelve un array nuevo con la forma esperada por la toolbar
           return empresaOptions.value.map((o) => ({ label: o.label, value: o.value }))
         },
       },
     },
   },
+
+  /* === PRODUCTO (select on create) === */
   {
     accessorKey: 'producto',
     header: ({ column }) => {
-      // carga perezosa (una vez)
       if (!prodLoaded.value && !prodLoading.value) void ensureProductosLoaded()
       return h(DataTableColumnHeader, {
         column: column as unknown as Column<WithId>,
         title: 'Producto',
-        // Puedes pasar todas las opciones (para filtros), o dejarlo vacío.
-        // options: [...new Set(prodList.value.map(p => ({label: p.nombre, value: p.codigo})))],
       })
     },
-
     cell: ({ row, column, table }) => {
       const isEditing = table.options.meta?.isCellEditing?.(row.index, column.getIndex()) ?? false
 
@@ -284,8 +282,7 @@ export const columns: Array<ColumnDef<Paginacion>> = [
         ''
 
       const createOnly = !!column.columnDef.meta?.createOnly
-      const canEditHere = !createOnly && isEditing
-      if (!canEditHere) return h('p', { class: 'truncate' }, friendly)
+      if (createOnly || !isEditing) return h('p', { class: 'truncate' }, friendly)
 
       const disabled = !empresaCode || prodLoading.value
 
@@ -308,33 +305,28 @@ export const columns: Array<ColumnDef<Paginacion>> = [
     },
     minSize: 200,
     size: 200,
-    // Editable SOLO en creación de fila:
     meta: {
       editable: false,
       createOnly: true,
       filter: {
         type: 'multiSelect',
         param: 'productos',
-        options: async (ctx) => {
-          // Ensure catalog is ready
+        label: 'Productos',
+        order: 2,
+        options: async (ctx: OptionsLoaderCtx<Paginacion>) => {
           if (!prodLoaded.value) await ensureProductosLoaded()
 
-          // Read current selection of "empresa" from toolbar filters
           const raw = ctx.getColumnFilterValue('empresa')
-          const selectedEmpresas: string[] = Array.isArray(raw)
-            ? (raw as string[])
+          const selectedEmpresas: Array<string> = Array.isArray(raw)
+            ? (raw as Array<string>)
             : raw
               ? [String(raw)]
               : []
 
-          // If no companies selected, return ALL products
           if (selectedEmpresas.length === 0) {
-            // prodOptions.value is already [{label, value}]
-            // Return a fresh array to avoid reactive mutations downstream
             return prodOptions.value.map((o) => ({ label: o.label, value: o.value }))
           }
 
-          // Otherwise: union of products belonging to the selected companies
           const seen = new Set<string>()
           const out: Array<{ label: string; value: string }> = []
 
@@ -347,16 +339,14 @@ export const columns: Array<ColumnDef<Paginacion>> = [
               }
             }
           }
-
-          // Optional: sort by label (Spanish locale)
           out.sort((a, b) => a.label.localeCompare(b.label, 'es'))
-
           return out
         },
       },
     },
   },
-  /* === FECHA (vista larga, input date al editar) === */
+
+  /* === FECHA (nice view, calendar on edit) === */
   {
     accessorKey: 'fecha',
     header: ({ column }) =>
@@ -366,12 +356,10 @@ export const columns: Array<ColumnDef<Paginacion>> = [
       const value = (table.options.meta?.getCellValue?.(row.index, 'fecha', row.original) ??
         (row.getValue('fecha') as Paginacion['fecha'])) as string | null
 
-      // Vista "bonita" cuando NO se edita
-      if (!isEditing) {
+      const createOnly = !!column.columnDef.meta?.createOnly
+      if (createOnly || !isEditing)
         return h('p', { class: 'truncate' }, formatFechaEs(value ?? null))
-      }
 
-      // Edición con botón + calendario
       return h(DatePickerPopover, {
         modelValue: value,
         noClear: true,
@@ -395,7 +383,12 @@ export const columns: Array<ColumnDef<Paginacion>> = [
     meta: {
       editable: false,
       createOnly: true,
-      filter: { type: 'dateRange', serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' } },
+      filter: {
+        type: 'dateRange',
+        serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' },
+        label: 'Fechas',
+        order: 3,
+      },
     },
   },
   /* === num_paginas (input number al editar) === */

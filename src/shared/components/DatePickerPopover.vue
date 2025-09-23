@@ -108,7 +108,7 @@ function onPick(val: DateValue | undefined) {
 
     <PopoverContent class="w-auto p-0" align="start" data-keep-edit-open>
       <Calendar
-        v-model:placeholder="placeholder"
+        :placeholder="placeholder as unknown as DateValue"
         :model-value="dv"
         calendar-label="Selecciona fecha"
         initial-focus

@@ -24,11 +24,11 @@ export interface DateRangeFilterMeta extends FilterMetaCommon {
 
 export interface OptionsLoaderCtx<TData> {
   table: Table<TData>
-  column: Column<TData, unknown>
+  column: Column<TData>
   getColumnFilterValue: (columnId: string) => unknown
 }
 
-export type OptionsSource<TData = unknown> =
+export type OptionsSource<TData> =
   | Option[]
   | ((ctx: OptionsLoaderCtx<TData>) => Option[] | Promise<Option[]>)
 
@@ -50,6 +50,7 @@ export type ColumnFilterMeta =
   | DateRangeFilterMeta
   | MultiSelectFilterMeta
   | BooleanFilterMeta
+  | undefined
 
 export interface DateRangeValue {
   from?: string

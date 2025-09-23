@@ -18,7 +18,7 @@ import type {
   DateRangeValue,
   OptionsLoaderCtx,
   OptionsSource,
-} from '@/shared/types/table-filters'
+} from '@/features/datatable/types/table-filters'
 import { getLocalTimeZone, today, parseDate, type DateValue } from '@internationalized/date'
 
 import ComboboxSelect, { type SelectOption } from '@/shared/components/ComboboxSelect.vue'
@@ -95,14 +95,14 @@ const isInitialState = computed<boolean>(() =>
 
 const showReset = computed<boolean>(() => !isInitialState.value)
 
-function getColumnTitle<T>(col: Column<T, unknown>): string {
+function getColumnTitle<T>(col: Column<T>): string {
   const header = col.columnDef.header
 
   if (typeof header === 'string') return header
 
   if (typeof header === 'function') {
     try {
-      const vnode = (header as (ctx: { column: Column<T, unknown> }) => VNode)({ column: col })
+      const vnode = (header as (ctx: { column: Column<T> }) => VNode)({ column: col })
       const maybeTitle = (vnode?.props as Readonly<Record<string, unknown>> | null | undefined)
         ?.title
       if (typeof maybeTitle === 'string' && maybeTitle.trim().length > 0) {
@@ -161,7 +161,7 @@ function getToMinDV(columnId: string): DateValue | null {
 
 const textInputs = reactive<Record<string, string>>({})
 const dateInputs = reactive<Record<string, DateRangeValue>>({})
-const multiInputs = reactive<Record<string, string[]>>({})
+const multiInputs = reactive<Record<string, Array<string>>>({})
 const optionsMap = reactive<Record<string, SelectOption[]>>({})
 const booleanInputs = reactive<Record<string, 'true' | 'false'>>({})
 
@@ -237,7 +237,7 @@ onMounted(async () => {
       const v = (current ?? {}) as DateRangeValue
       dateInputs[id] = { from: v.from, to: v.to }
     } else if (isMulti(f.meta)) {
-      multiInputs[id] = Array.isArray(current) ? (current as string[]) : []
+      multiInputs[id] = Array.isArray(current) ? (current as Array<string>) : []
       await loadMultiOptions(f)
     } else if (isBoolean(f.meta)) {
       booleanInputs[id] = current ? 'true' : 'false'
@@ -269,7 +269,7 @@ function onDateChange(id: string, key: 'from' | 'to', value: string | null): voi
   col?.setFilterValue(next)
 }
 
-function onMultiChange(id: string, values: string[]): void {
+function onMultiChange(id: string, values: Array<string>): void {
   multiInputs[id] = values
 
   const col = filterableColumns.value.find((f) => f.col.id === id)?.col
@@ -339,7 +339,7 @@ function getBooleanOptions<T>(f: FilterableCol<T>): SelectOption[] {
       {{ $t('forms.results', table.getRowCount()) }}
     </span>
     <Separator orientation="vertical" class="max-h-6" />
-    <span class="flex flex-1 justify-start items-center gap-3 pb-1 overflow-scroll">
+    <span class="flex flex-1 justify-start items-center gap-3 pb-1 overflow-auto scrollbar-thin">
       <template v-for="f in filterableColumns" :key="f.col.id">
         <!-- TEXT -->
         <div v-if="f.meta.type === 'text'" class="flex flex-col">
@@ -388,7 +388,7 @@ function getBooleanOptions<T>(f: FilterableCol<T>): SelectOption[] {
             multiple
             clearable
             @update:model-value="
-              (vals: string[] | string | null) =>
+              (vals: Array<string> | string | null) =>
                 onMultiChange(f.col.id, Array.isArray(vals) ? vals : vals ? [vals] : [])
             "
           />

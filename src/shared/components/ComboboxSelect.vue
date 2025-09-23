@@ -20,7 +20,7 @@ export type SelectOption = Readonly<{
   labelLower?: string
 }>
 
-type ModelValue = string | string[] | null
+type ModelValue = string | Array<string> | null
 
 const props = withDefaults(
   defineProps<{
@@ -64,7 +64,7 @@ const emit = defineEmits<{
 const open = ref(false)
 const query = ref('')
 
-const selectedValues = computed<string[]>(() => {
+const selectedValues = computed<Array<string>>(() => {
   if (Array.isArray(props.modelValue)) return props.modelValue
   return props.modelValue ? [props.modelValue] : []
 })
@@ -175,7 +175,7 @@ const buttonLabel = computed(() => {
           <CommandGroup>
             <div
               ref="scrollParent"
-              class="relative overflow-scroll h-max max-h-64"
+              class="relative overflow-auto scrollbar-thin h-max max-h-64"
               data-keep-edit-open="true"
             >
               <div :style="{ height: `${totalSize}px`, position: 'relative', width: '100%' }">

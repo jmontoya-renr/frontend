@@ -311,6 +311,8 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
       filter: {
         type: 'multiSelect',
         param: 'empresas',
+        label: 'Sociedades',
+        order: 1,
         options: async () => {
           if (!empLoaded.value) await ensureEmpresasLoaded()
           return empresaOptions.value
@@ -339,7 +341,12 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     size: 150,
     meta: {
       editable: false,
-      filter: { type: 'dateRange', serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' } },
+      filter: {
+        type: 'dateRange',
+        serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' },
+        label: 'Fechas',
+        order: 3,
+      },
     },
   },
   {
@@ -400,7 +407,10 @@ export const columns: Array<ColumnDef<GastoEventoInferido>> = [
     cell: ({ row }) => ro(String(row.getValue('texto_asiento') ?? '')),
     minSize: 220,
     size: 280,
-    meta: { editable: false, filter: { type: 'text', param: 'texto_asiento' } },
+    meta: {
+      editable: false,
+      filter: { type: 'text', param: 'texto_asiento', label: 'Texto del asiento', order: 2 },
+    },
   },
   {
     accessorKey: 'importe',

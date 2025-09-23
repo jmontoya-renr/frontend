@@ -15,7 +15,7 @@ import {
 import type { WithId } from '@/shared/types/with-id'
 
 interface DataTableColumnHeaderProps {
-  column: Column<T, unknown>
+  column: Column<T>
   title: string
 }
 

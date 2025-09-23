@@ -38,7 +38,7 @@ const firstDayOfThisMonth: DateValue = new CalendarDate(todayDv.year, todayDv.mo
 const todayStr = todayDv.toString()
 const firstDayStr = firstDayOfThisMonth.toString()
 
-function buildInitialFilters(): Record<string, string[]> {
+function buildInitialFilters(): Record<string, Array<string>> {
   return {
     fecha_inicio: [firstDayStr],
     fecha_fin: [todayStr],
@@ -66,7 +66,7 @@ const {
   },
 })
 
-const initialFilters = ref<Record<string, string[]>>({})
+const initialFilters = ref<Record<string, Array<string>>>({})
 // Handlers para pasar cambios al composable
 async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } | null) {
   booting.value = false
@@ -78,7 +78,7 @@ async function onServerSort(p: { sort_by: string; sort_order: 'asc' | 'desc' } |
   await fetch() // reinicia (append desde cero en tu versión)
 }
 
-type ServerFilters = Record<string, string[]>
+type ServerFilters = Record<string, Array<string>>
 
 /** Si una clave no viene en `incoming`, usa el valor por defecto de `initialFilters` */
 function mergeWithDefaults(incoming: ServerFilters): ServerFilters {

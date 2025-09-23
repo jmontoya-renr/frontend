@@ -1,7 +1,6 @@
 import { TableMeta } from '@tanstack/vue-table'
-import { ColumnFilterMeta } from './table-filters'
-
-type RowCommitReason = 'row-change' | 'edit-exit' | 'unmount'
+import type { RowCommitReason } from '@/features/datatable/types/row'
+import { ColumnFilterMeta } from '@/features/datatable/types/table-filters'
 
 declare module '@tanstack/vue-table' {
   interface TableMeta<TData> {

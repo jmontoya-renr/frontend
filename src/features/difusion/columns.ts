@@ -12,6 +12,7 @@ import { useEmpresasCatalog, useProductosCatalog } from './catalogs'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import type { WithId } from '@/shared/types/with-id'
 import { Trash2 } from 'lucide-vue-next'
+import type { OptionsLoaderCtx } from '@/features/datatable/types/table-filters'
 
 const {
   loaded: empLoaded,
@@ -274,6 +275,8 @@ export const columns: Array<ColumnDef<Difusion>> = [
       filter: {
         type: 'multiSelect',
         param: 'empresas',
+        label: 'Sociedades',
+        order: 1,
         options: async () => {
           if (!empLoaded.value) await ensureEmpresasLoaded()
           return empresaOptions.value.map((o) => ({ label: o.label, value: o.value }))
@@ -346,12 +349,14 @@ export const columns: Array<ColumnDef<Difusion>> = [
       filter: {
         type: 'multiSelect',
         param: 'productos',
-        options: async (ctx) => {
+        label: 'Productos',
+        order: 2,
+        options: async (ctx: OptionsLoaderCtx<Difusion>) => {
           if (!prodLoaded.value) await ensureProductosLoaded()
 
           const raw = ctx.getColumnFilterValue('empresa')
-          const selectedEmpresas: string[] = Array.isArray(raw)
-            ? (raw as string[])
+          const selectedEmpresas: Array<string> = Array.isArray(raw)
+            ? (raw as Array<string>)
             : raw
               ? [String(raw)]
               : []
@@ -416,7 +421,12 @@ export const columns: Array<ColumnDef<Difusion>> = [
     meta: {
       editable: false,
       createOnly: true,
-      filter: { type: 'dateRange', serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' } },
+      filter: {
+        type: 'dateRange',
+        serverKeys: { from: 'fecha_inicio', to: 'fecha_fin' },
+        label: 'Fechas',
+        order: 3,
+      },
     },
   },
 
