@@ -26,7 +26,7 @@ declare module '@tanstack/vue-table' {
     deleteOriginalAsync?: (original: TData) => Promise<void>
   }
 
-  interface ColumnMeta<TData, TValue> {
+  interface ColumnMeta<TData, TValue = unknown> {
     editable?: boolean
     createOnly?: boolean
     fixedFirst?: boolean

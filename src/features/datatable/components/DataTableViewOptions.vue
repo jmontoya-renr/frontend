@@ -2,7 +2,13 @@
 import type { Column, Table, TableState, ColumnDef } from '@tanstack/vue-table'
 import { computed, ref, onMounted, watch } from 'vue'
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/shared/components/ui/dialog'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Button } from '@/shared/components/ui/button'
 import { ScrollArea } from '@/shared/components/ui/scroll-area'
@@ -17,7 +23,7 @@ const props = defineProps<DataTableViewOptionsProps>()
 
 const open = ref(false)
 
-type FixedMeta = { fixedFirst?: boolean; fixedLast?: boolean }
+type FixedMeta = { fixedFirst?: boolean; fixedLast?: boolean; title?: string }
 
 function isFixedFirstColumn(col: Column<T>): boolean {
   const meta = (col.columnDef as ColumnDef<T> & { meta?: FixedMeta }).meta
@@ -44,6 +50,12 @@ const fixedFirstIds = computed<Array<string>>(() =>
 const fixedLastIds = computed<Array<string>>(() =>
   allColumns.value.filter((c) => isFixedLastColumn(c)).map((c) => c.id),
 )
+
+function colLabel(col: Column<T>): string {
+  const meta = (col.columnDef as ColumnDef<T> & { meta?: FixedMeta }).meta
+  const title = (meta as FixedMeta | undefined)?.title
+  return typeof title === 'string' && title.trim() ? title : col.id
+}
 
 function forcePinned(order: Array<string>): Array<string> {
   const first = fixedFirstIds.value
@@ -223,6 +235,9 @@ defineExpose({
   <Dialog v-model:open="open">
     <DialogContent class="sm:max-w-[720px]">
       <DialogHeader class="flex sm:flex-row items-center mt-4">
+        <DialogDescription class="sr-only">
+          Make changes to your profile here. Click save when you're done.
+        </DialogDescription>
         <DialogTitle class="flex-1">Columnas</DialogTitle>
         <Button variant="outline" size="sm" class="gap-1" @click="resetOrder">
           <RotateCcw class="h-4 w-4" />
@@ -255,7 +270,7 @@ defineExpose({
                     @update:model-value="(v) => col.getCanHide() && col.toggleVisibility(!!v)"
                   />
                   <span class="truncate capitalize text-sm">
-                    {{ col.id }}
+                    {{ colLabel(col) }}
                   </span>
                   <span
                     v-if="
@@ -345,9 +360,9 @@ defineExpose({
                     :model-value="col.getIsVisible()"
                     @update:model-value="(v) => col.toggleVisibility(!!v)"
                   />
-                  <span class="truncate capitalize text-sm text-muted-foreground">{{
-                    col.id
-                  }}</span>
+                  <span class="truncate capitalize text-sm text-muted-foreground">
+                    {{ colLabel(col) }}
+                  </span>
                 </label>
               </li>
             </ul>

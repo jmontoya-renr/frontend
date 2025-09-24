@@ -14,7 +14,7 @@ import { convertToCSV, downloadCSV } from '@/shared/utils/csv-helpers'
 import type { Paginacion } from '../paginacion'
 
 import { columns } from '../columns'
-import DataTable from '@/shared/components/table/DataTable.vue'
+import DataTable from '@/features/datatable/components/DataTable.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -57,6 +57,7 @@ const {
   setFilters,
   setSort,
   clearSort,
+  create: createItem,
   update: updateItem,
   remove: removeItem,
 } = useCursorCrud<Paginacion, string | number, Partial<Paginacion>, Partial<Paginacion>>({
@@ -212,6 +213,20 @@ async function onRowDelete({ rowId, onSuccess, onError }: RowDeletePayload) {
   }
 }
 
+type RowAddPayload = {
+  drafts: Array<Partial<Paginacion>>
+  onSuccess: () => void
+  onError: (err?: unknown) => void
+}
+async function onRowsAdd({ drafts, onSuccess, onError }: RowAddPayload) {
+  try {
+    drafts.forEach(async (d) => await createItem(d))
+    onSuccess()
+  } catch (e) {
+    onError(e)
+  }
+}
+
 // ======= Montaje =======
 onMounted(async () => {
   await ensureEmpresas()
@@ -222,7 +237,7 @@ onMounted(async () => {
 <template>
   <section class="mx-auto flex flex-col min-h-0 min-w-0 flex-1 px-8 py-4 w-full max-w-8xl">
     <!-- Header -->
-    <header class="mb-8">
+    <header class="mb-4">
       <h1 class="text-3xl font-bold tracking-tight">{{ $t('titles.zms.paginacion') }}</h1>
     </header>
 
@@ -242,6 +257,7 @@ onMounted(async () => {
         :initial-server-filters="initialFilters"
         @row-commit="onRowCommit"
         @row-delete="onRowDelete"
+        @rows-add="onRowsAdd"
         @server-sort="onServerSort"
         @server-filters="onServerFilters"
       />

@@ -146,6 +146,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!refreshToken.value) return logout()
     try {
       const { data } = await http.post(API_ENDPOINTS.REFRESH, {
+        access_token: accessToken.value,
         refresh_token: refreshToken.value,
       })
       accessToken.value = data.access_token

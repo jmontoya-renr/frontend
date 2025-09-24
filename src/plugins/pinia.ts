@@ -12,13 +12,7 @@ pinia.use(({ store }) => {
   watch(
     store.$state,
     (state) => {
-      const stateToSave = { ...state }
-
-      if (store.$id === 'auth') {
-        delete stateToSave.accessToken
-      }
-
-      localStorage.setItem(store.$id, JSON.stringify(stateToSave))
+      localStorage.setItem(store.$id, JSON.stringify({ ...state }))
     },
     { deep: true },
   )

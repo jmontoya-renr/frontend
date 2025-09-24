@@ -13,7 +13,7 @@ import { convertToCSV, downloadCSV } from '@/shared/utils/csv-helpers'
 import type { Difusion } from '../difusion'
 
 import { columns } from '../columns'
-import DataTable from '@/shared/components/table/DataTable.vue'
+import DataTable from '@/features/datatable/components/DataTable.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()

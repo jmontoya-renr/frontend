@@ -1,45 +1,42 @@
-// columns-gasto-evento.ts
 import { h } from 'vue'
 import type { Column, ColumnDef } from '@tanstack/vue-table'
 import type { WithId } from '@/shared/types/with-id'
-import type { GastoEvento } from './gasto_evento' // Ajusta la ruta a tu interfaz
+import type { GastoEvento } from '@/features/gasto_evento/gasto_evento'
+import { createSelectionColumn } from '@/features/datatable/columns'
 
-import DataTableColumnHeader from '@/shared/components/table/DataTableColumnHeader.vue'
+import DataTableColumnHeader from '@/features/datatable/components/DataTableColumnHeader.vue'
 import ComboboxSelect from '@/shared/components/ComboboxSelect.vue'
-import { Checkbox } from '@/shared/components/ui/checkbox'
 
-// 🔗 Catálogos
-import { useEmpresasCatalog } from './catalogs'
-import { useCampanyaCatalog, useConceptoCatalog } from './catalogs'
+import {
+  useEmpresasCatalog,
+  useCampanyaCatalog,
+  useConceptoCatalog,
+} from '@/features/gasto_evento/catalogs'
 
-// --- Empresas: para mostrar nombre amigable ---
 const {
   loaded: empLoaded,
   loading: empLoading,
   ensureLoaded: ensureEmpresasLoaded,
-  options: empresaOptions, // para filtros
-  byCodigo: empresaByCodigo, // Map<string, Empresa>
+  options: empresaOptions,
+  byCodigo: empresaByCodigo,
 } = useEmpresasCatalog()
 
-// --- Campañas: editable ---
 const {
   loaded: campLoaded,
   loading: campLoading,
   ensureLoaded: ensureCampLoaded,
-  options: campOptions, // [{label, value:number}]
-  byCodigo: campByCodigo, // Map<number, Campanya>
+  options: campOptions,
+  byCodigo: campByCodigo,
 } = useCampanyaCatalog()
 
-// --- Conceptos: editable ---
 const {
   loaded: concLoaded,
   loading: concLoading,
   ensureLoaded: ensureConcLoaded,
-  options: concOptions, // [{label, value:number}]
-  byId: concById, // Map<number, Concepto>
+  options: concOptions,
+  byId: concById,
 } = useConceptoCatalog()
 
-/* ---------------- helpers (view-only render) ---------------- */
 function ro(text: string) {
   return h('p', { class: 'truncate' }, text)
 }
@@ -64,35 +61,9 @@ function formatMoneyEs(n: number | string | null | undefined): string {
 }
 
 export const columns: Array<ColumnDef<GastoEvento>> = [
-  // === SELECT CHECKBOX ===
-  {
-    id: 'select',
-    header: ({ table }) =>
-      h(Checkbox, {
-        modelValue:
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && 'indeterminate'),
-        'onUpdate:modelValue': (value) => table.toggleAllPageRowsSelected(!!value),
-        ariaLabel: 'Select all',
-        class: 'translate-y-0.5',
-      }),
-    cell: ({ row }) =>
-      h(Checkbox, {
-        modelValue: row.getIsSelected(),
-        'onUpdate:modelValue': (value) => row.toggleSelected(!!value),
-        onClick: (e: MouseEvent) => e.stopPropagation(),
-        onMousedown: (e: MouseEvent) => e.stopPropagation(),
-        ariaLabel: 'Select row',
-        class: 'ml-2 translate-y-0.5',
-      }),
-    enableSorting: false,
-    enableHiding: false,
-    enableResizing: false,
-    size: 56,
-    minSize: 56,
-    maxSize: 56,
+  createSelectionColumn({
+    title: 'Seleccionar',
     meta: {
-      fixedFirst: true,
       filter: {
         type: 'boolean',
         param: 'sin_completar',
@@ -102,8 +73,7 @@ export const columns: Array<ColumnDef<GastoEvento>> = [
         falseLabel: 'Todas las filas',
       },
     },
-  },
-
+  }),
   /* =================== LECTURA (readonly) =================== */
 
   // EMPRESA (readonly, label desde catálogo)

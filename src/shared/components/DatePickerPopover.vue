@@ -88,8 +88,8 @@ function onPick(val: DateValue | undefined) {
 </script>
 
 <template>
-  <Popover v-model:open="open">
-    <PopoverTrigger as-child>
+  <Popover data-keep-edit-open="true" v-model:open="open">
+    <PopoverTrigger as-child data-keep-edit-open="true">
       <Button
         type="button"
         variant="outline"
@@ -97,7 +97,7 @@ function onPick(val: DateValue | undefined) {
         :class="
           cn('w-[240px] ps-3 text-start font-normal', !dv && 'text-muted-foreground', buttonClass)
         "
-        data-keep-edit-open
+        data-keep-edit-open="true"
         aria-label="Abrir calendario"
         :aria-required="props.noClear ? 'true' : undefined"
       >
@@ -106,7 +106,7 @@ function onPick(val: DateValue | undefined) {
       </Button>
     </PopoverTrigger>
 
-    <PopoverContent class="w-auto p-0" align="start" data-keep-edit-open>
+    <PopoverContent class="w-auto p-0" align="start" data-keep-edit-open="true">
       <Calendar
         :placeholder="placeholder as unknown as DateValue"
         :model-value="dv"
@@ -115,7 +115,7 @@ function onPick(val: DateValue | undefined) {
         :min-value="props.minValue ?? undefined"
         :max-value="props.maxValue ?? undefined"
         @update:model-value="onPick"
-        data-keep-edit-open
+        data-keep-edit-open="true"
       />
     </PopoverContent>
   </Popover>

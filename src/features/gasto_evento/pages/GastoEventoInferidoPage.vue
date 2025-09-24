@@ -13,7 +13,7 @@ import { convertToCSV, downloadCSV } from '@/shared/utils/csv-helpers'
 import type { GastoEventoInferido } from '../gasto_evento'
 
 import { columns } from '@/features/gasto_evento/columns.inferido'
-import DataTable from '@/shared/components/table/DataTable.vue'
+import DataTable from '@/features/datatable/components/DataTable.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -230,6 +230,7 @@ onMounted(async () => {
     <section class="flex-1 min-h-0 min-w-0 flex flex-col space-y-4">
       <DataTable
         ref="data-table"
+        disableNewRows
         :records="items"
         :columns="columns"
         :persist-key="`${route.name as string}-${authStore.user.id}`"

@@ -3,12 +3,13 @@ import type { Column, ColumnDef, Row, Table, TableMeta } from '@tanstack/vue-tab
 import type { WithId } from '@/shared/types/with-id'
 import type { GastoEventoInferido } from './gasto_evento'
 
-import DataTableColumnHeader from '@/shared/components/table/DataTableColumnHeader.vue'
+import DataTableColumnHeader from '@/features/datatable/components/DataTableColumnHeader.vue'
 import ComboboxSelect, { type SelectOption } from '@/shared/components/ComboboxSelect.vue'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { MoveRight, Loader2 } from 'lucide-vue-next'
 
 import { useEmpresasCatalog, useCampanyaCatalog, useConceptoCatalog } from './catalogs'
+import { createSelectionColumn } from '../datatable/columns'
 
 const {
   loaded: empLoaded,
@@ -262,34 +263,19 @@ function formatMoneyEs(n: number | string | null | undefined): string {
 }
 
 export const columns: Array<ColumnDef<GastoEventoInferido>> = [
-  {
-    id: 'select',
-    header: ({ table }) =>
-      h(Checkbox, {
-        modelValue:
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && 'indeterminate'),
-        'onUpdate:modelValue': (value) => table.toggleAllPageRowsSelected(!!value),
-        ariaLabel: 'Select all',
-        class: 'translate-y-0.5 size-5',
-      }),
-    cell: ({ row }) =>
-      h(Checkbox, {
-        modelValue: row.getIsSelected(),
-        'onUpdate:modelValue': (value) => row.toggleSelected(!!value),
-        onClick: (e: MouseEvent) => e.stopPropagation(),
-        onMousedown: (e: MouseEvent) => e.stopPropagation(),
-        ariaLabel: 'Select row',
-        class: 'ml-2 translate-y-0.5 size-5',
-      }),
-    enableSorting: false,
-    enableHiding: false,
-    enableResizing: false,
-    size: 56,
-    minSize: 56,
-    maxSize: 56,
-    meta: { fixedFirst: true },
-  },
+  createSelectionColumn({
+    title: 'Seleccionar',
+    meta: {
+      filter: {
+        type: 'boolean',
+        param: 'sin_completar',
+        label: 'Mostrar filas',
+        order: 10,
+        trueLabel: 'Filas sin completar',
+        falseLabel: 'Todas las filas',
+      },
+    },
+  }),
   {
     accessorKey: 'empresa',
     header: ({ column }) => {

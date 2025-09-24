@@ -39,7 +39,7 @@ export function useFocus<T>(opts: {
     }
 
     nextTick(() => {
-      opts.scrollToIndex(ri, { align: 'auto' })
+      opts.scrollToIndex(ri, { align: 'center' })
       nextTick(() => {
         const td = cellEls.value[cell.id]
         if (!td) return
@@ -61,10 +61,11 @@ export function useFocus<T>(opts: {
       clearCellFocus()
       return
     }
-    const ri = opts.activeRowIndex.value < 0 ? 0 : opts.activeRowIndex.value
-    const ci = opts.activeColIndex.value < 0 ? 0 : opts.activeColIndex.value
-    opts.activeRowIndex.value = clamp(ri, 0, R - 1)
-    opts.activeColIndex.value = clamp(ci, 0, C - 1)
+    const hasFocus = opts.activeRowIndex.value >= 0 && opts.activeColIndex.value >= 0
+    if (!hasFocus) return
+
+    opts.activeRowIndex.value = clamp(opts.activeRowIndex.value, 0, R - 1)
+    opts.activeColIndex.value = clamp(opts.activeColIndex.value, 0, C - 1)
 
     if (!isRowEditableAt(opts.activeRowIndex.value)) {
       nextTick(() =>

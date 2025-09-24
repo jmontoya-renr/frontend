@@ -38,7 +38,7 @@ const data = {
   user: {
     name: auth.user.nombre!,
     email: auth.user.email!,
-    avatar: '/avatars/shadcn.jpg',
+    avatar: '',
   },
 }
 
